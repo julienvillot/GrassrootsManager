@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MatchSettings, FormationPhase } from '../types/football';
 import { formatTime } from '../utils/matchUtils';
 import {
@@ -35,6 +35,7 @@ interface LiveScoreboardProps {
   onEndMatch: () => void;
   onResetMatch: () => void;
   onOpenGoalModal: () => void;
+  onUndoOurGoal?: () => void;
   onAddOpponentGoal: () => void;
   onUndoOpponentGoal: () => void;
   nextScheduledPhase?: FormationPhase;
@@ -55,14 +56,28 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
   onEndMatch,
   onResetMatch,
   onOpenGoalModal,
+  onUndoOurGoal,
   onAddOpponentGoal,
   onUndoOpponentGoal,
   nextScheduledPhase,
 }) => {
   const [isConfirmEndOpen, setIsConfirmEndOpen] = useState(false);
+  const [showGoalUndoToast, setShowGoalUndoToast] = useState(false);
+  const prevScoreUsRef = useRef(scoreUs);
+
+  useEffect(() => {
+    if (scoreUs > prevScoreUsRef.current) {
+      setShowGoalUndoToast(true);
+      const timer = setTimeout(() => setShowGoalUndoToast(false), 6000);
+      return () => clearTimeout(timer);
+    }
+    prevScoreUsRef.current = scoreUs;
+  }, [scoreUs]);
+
   const currentMinute = Math.floor(elapsedSeconds / 60);
   const matchDurMin = settings.matchDurationMinutes || 60;
   const periodDurationSeconds = (matchDurMin * 60) / totalPeriods;
+  const isPeriodElapsed = currentPeriod < totalPeriods && elapsedSeconds >= currentPeriod * periodDurationSeconds;
   const periodDurationMinutesStr = Math.round(matchDurMin / totalPeriods);
   const periodProgress = Math.min(
     100,
@@ -76,6 +91,60 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
 
   return (
     <div className="bg-slate-900/95 rounded-3xl p-4 sm:p-6 border border-slate-800 shadow-2xl backdrop-blur-xl relative">
+      {/* PERIOD EXPIRED / ROTATION DUE ALERT */}
+      {isPeriodElapsed && (
+        <div className="mb-4 px-4 py-3 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <span className="text-xl shrink-0">🔔</span>
+            <div>
+              <p className="font-extrabold text-sm text-white flex items-center gap-2">
+                <span>Period {currentPeriod} Time Elapsed</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 border border-amber-500/40">
+                  {periodDurationMinutesStr}m reached
+                </span>
+              </p>
+              <p className="text-xs text-amber-300/80 mt-0.5">
+                Time for planned substitutions and tactical rotations.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onNextPeriod}
+            className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md shadow-emerald-700/30 transition-all active:scale-95 shrink-0"
+          >
+            <span>Advance to Period {currentPeriod + 1}</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* QUICK GOAL UNDO TOAST (6s duration) */}
+      {showGoalUndoToast && onUndoOurGoal && (
+        <div className="mb-4 px-4 py-2.5 rounded-2xl bg-emerald-950/90 border border-emerald-500/50 shadow-xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-emerald-200">
+            <span>⚽ Goal recorded!</span>
+            <span className="text-[11px] text-slate-400 font-normal">Accidental tap?</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                onUndoOurGoal();
+                setShowGoalUndoToast(false);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-rose-600/80 hover:bg-rose-500 text-white font-extrabold text-xs flex items-center gap-1 shadow transition-all active:scale-95"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Undo Goal
+            </button>
+            <button
+              onClick={() => setShowGoalUndoToast(false)}
+              className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Bar: Period Switcher & End Game Action */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-800/80">
         {/* Period Navigation */}
@@ -138,13 +207,22 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
             Our Squad
           </span>
 
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-3 flex items-center gap-2">
             <button
               onClick={onOpenGoalModal}
               className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm sm:text-base shadow-lg shadow-emerald-600/30 active:scale-95 transition-all"
             >
               <Plus className="w-4 h-4 stroke-[3]" /> GOAL! ⚽
             </button>
+            {scoreUs > 0 && onUndoOurGoal && (
+              <button
+                onClick={onUndoOurGoal}
+                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-700 transition-colors"
+                title="Undo our goal"
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 

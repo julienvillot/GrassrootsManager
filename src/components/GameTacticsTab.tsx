@@ -1,6 +1,7 @@
 import React from 'react';
 import { Game, Player, FormationPreset, PositionRole } from '../types/football';
 import { FORMATION_PRESETS, getFormationById } from '../constants/formations';
+import { createDefaultPhases } from '../utils/matchUtils';
 import {
   Users,
   Shield,
@@ -13,6 +14,7 @@ import {
   Info,
   Calendar,
   MapPin,
+  Layers,
 } from 'lucide-react';
 
 interface GameTacticsTabProps {
@@ -36,7 +38,6 @@ export const GameTacticsTab: React.FC<GameTacticsTabProps> = ({
     const preset = getFormationById(presetId);
     onUpdateGame({
       currentFormationId: preset.id,
-      // Keep existing assignments where slot IDs match, or reset
       settings: {
         ...game.settings,
         format: preset.format,
@@ -53,6 +54,20 @@ export const GameTacticsTab: React.FC<GameTacticsTabProps> = ({
   const handleSelectAllAbsent = () => {
     onUpdateGame({
       presentPlayerIds: [],
+    });
+  };
+
+  const handleSplitChange = (periods: number) => {
+    const matchDur = game.settings.matchDurationMinutes || 60;
+    const presentPlayers = players.filter(p => game.presentPlayerIds.includes(p.id));
+    const newPhases = createDefaultPhases(
+      presentPlayers.length > 0 ? presentPlayers : players,
+      currentFormation,
+      periods,
+      matchDur
+    );
+    onUpdateGame({
+      phases: newPhases,
     });
   };
 
@@ -204,12 +219,12 @@ export const GameTacticsTab: React.FC<GameTacticsTabProps> = ({
         </div>
       </div>
 
-      {/* 3. MATCH PARAMETERS */}
+      {/* 3. MATCH PARAMETERS & PERIOD SPLIT */}
       <div className="bg-slate-900/90 rounded-2xl p-4 sm:p-6 border border-slate-800 shadow-xl backdrop-blur-md space-y-4">
         <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
           <Clock className="w-5 h-5 text-emerald-400" />
           <h2 className="font-extrabold text-white text-base sm:text-lg">
-            Match Details & Fair Play Target
+            Match Details & Structure
           </h2>
         </div>
 
@@ -255,14 +270,15 @@ export const GameTacticsTab: React.FC<GameTacticsTabProps> = ({
               <input
                 type="number"
                 value={game.settings.matchDurationMinutes || 60}
-                onChange={e =>
+                onChange={e => {
+                  const newDur = parseInt(e.target.value) || 60;
                   onUpdateGame({
                     settings: {
                       ...game.settings,
-                      matchDurationMinutes: parseInt(e.target.value) || 60,
+                      matchDurationMinutes: newDur,
                     },
-                  })
-                }
+                  });
+                }}
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-emerald-500"
               />
               <span className="text-slate-400 font-mono">min</span>
@@ -287,6 +303,60 @@ export const GameTacticsTab: React.FC<GameTacticsTabProps> = ({
               />
               <span className="text-slate-400 font-mono">min</span>
             </div>
+          </div>
+        </div>
+
+        {/* 1-Tap Period Split Selector */}
+        <div className="pt-4 border-t border-slate-800">
+          <label className="block font-semibold text-slate-300 text-xs mb-2 flex items-center gap-1.5">
+            <Layers className="w-4 h-4 text-emerald-400" />
+            <span>Match Structure / How is this game split?</span>
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {[
+              {
+                periods: 4,
+                title: '4 Quarters',
+                sub: `${Math.round((game.settings.matchDurationMinutes || 60) / 4)}m each`,
+                tag: 'Recommended U12',
+              },
+              {
+                periods: 2,
+                title: '2 Halves',
+                sub: `${Math.round((game.settings.matchDurationMinutes || 60) / 2)}m each`,
+                tag: 'Traditional',
+              },
+              {
+                periods: 3,
+                title: '3 Periods',
+                sub: `${Math.round((game.settings.matchDurationMinutes || 60) / 3)}m each`,
+                tag: 'Development',
+              },
+            ].map(split => {
+              const isSelected = game.phases.length === split.periods;
+              return (
+                <button
+                  key={split.periods}
+                  type="button"
+                  onClick={() => handleSplitChange(split.periods)}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    isSelected
+                      ? 'bg-emerald-500/15 border-emerald-500 ring-1 ring-emerald-500/40 text-white shadow'
+                      : 'bg-slate-800/60 border-slate-700/60 hover:bg-slate-800 text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-xs sm:text-sm text-white">{split.title}</span>
+                    <span className="text-[10px] font-bold text-emerald-400 bg-slate-900 px-2 py-0.5 rounded-full border border-slate-800">
+                      {split.sub}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    {split.tag} • Auto fair rotation
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

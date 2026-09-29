@@ -124,18 +124,26 @@ function assignPlayersToSlotsByRole(
  */
 export function createDefaultPhases(
   presentPlayers: Player[],
-  preset: FormationPreset
+  preset: FormationPreset,
+  numPhases: number = 4,
+  matchDurationMinutes: number = 60
 ): FormationPhase[] {
   const slots = preset.slots;
   const slotsOnPitch = slots.length; // e.g. 9 for 9v9
   const totalPlayers = presentPlayers.length;
-  const numPhases = 4;
 
-  // Phase scaffolding with dynamic target minutes (will be overridden by distributeTargetMinutes in FormationPlanManager)
+  // Phase scaffolding with dynamic target minutes based on matchDurationMinutes / numPhases
   const phases: FormationPhase[] = Array.from({ length: numPhases }, (_, i) => ({
     id: `phase-${i + 1}`,
-    name: `Period ${i + 1}`,
-    targetMinute: 0, // will be recalculated
+    name:
+      numPhases === 2
+        ? i === 0
+          ? "1st Half (0'-30')"
+          : "2nd Half (30'-60')"
+        : numPhases === 4
+        ? `Q${i + 1} (${Math.round((i * matchDurationMinutes) / numPhases)}'-${Math.round(((i + 1) * matchDurationMinutes) / numPhases)}')`
+        : `Period ${i + 1} (${Math.round((i * matchDurationMinutes) / numPhases)}'-${Math.round(((i + 1) * matchDurationMinutes) / numPhases)}')`,
+    targetMinute: i === 0 ? 0 : Math.round((i * matchDurationMinutes) / numPhases),
     formationId: preset.id,
     assignments: {},
     notes: '',

@@ -64,6 +64,22 @@ ${playerLines}
 Grassroots FC Manager`;
   };
 
+  const handleNativeShare = async () => {
+    const text = generateTextReport();
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${settings.teamName} vs ${settings.opponentName} Match Report`,
+          text,
+        });
+        return;
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+      }
+    }
+    handleCopy();
+  };
+
   const handleCopy = () => {
     navigator.clipboard.writeText(generateTextReport());
     setCopied(true);
@@ -102,7 +118,7 @@ Grassroots FC Manager`;
         {/* Score Banner */}
         <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-center">
           <div className="text-xs uppercase tracking-wider font-semibold text-emerald-400 mb-1">
-            U12 Match Result
+            Match Result
           </div>
           <div className="flex items-center justify-center gap-4 text-2xl sm:text-3xl font-black text-white">
             <span>{settings.teamName}</span>
@@ -164,18 +180,26 @@ Grassroots FC Manager`;
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
           <button
-            onClick={handleCopy}
+            onClick={handleNativeShare}
             className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 active:scale-98 transition-all"
           >
-            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            {copied ? 'Copied to Clipboard!' : 'Copy Summary for WhatsApp / Chat'}
+            <Share2 className="w-4 h-4" />
+            Share via WhatsApp / App
+          </button>
+
+          <button
+            onClick={handleCopy}
+            className="w-full sm:w-auto py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs sm:text-sm border border-slate-700 flex items-center justify-center gap-2 transition-colors"
+          >
+            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+            {copied ? 'Copied!' : 'Copy Text'}
           </button>
 
           <button
             onClick={handlePrint}
             className="w-full sm:w-auto py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs sm:text-sm border border-slate-700 flex items-center justify-center gap-2 transition-colors"
           >
-            <Printer className="w-4 h-4" /> Print / Save PDF
+            <Printer className="w-4 h-4" /> Print / PDF
           </button>
         </div>
       </div>

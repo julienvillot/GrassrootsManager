@@ -623,6 +623,21 @@ export default function App() {
     }
   };
 
+  const handleUndoOurGoal = () => {
+    if (activeGame.scoreUs > 0) {
+      const ourGoals = activeGame.events.filter(e => e.type === 'goal_us');
+      const lastGoal = ourGoals[ourGoals.length - 1];
+      if (lastGoal) {
+        handleDeleteEvent(lastGoal.id);
+      } else {
+        updateActiveGame(prev => ({
+          ...prev,
+          scoreUs: Math.max(0, prev.scoreUs - 1),
+        }));
+      }
+    }
+  };
+
   const handleDeleteEvent = (eventId: string) => {
     const evt = activeGame.events.find(e => e.id === eventId);
     if (!evt) return;
@@ -1282,6 +1297,7 @@ export default function App() {
                   onEndMatch={handleEndMatch}
                   onResetMatch={handleResetMatch}
                   onOpenGoalModal={() => setIsGoalModalOpen(true)}
+                  onUndoOurGoal={handleUndoOurGoal}
                   onAddOpponentGoal={handleAddOpponentGoal}
                   onUndoOpponentGoal={handleUndoOpponentGoal}
                   nextScheduledPhase={nextScheduledPhase}
