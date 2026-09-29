@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MatchSettings, FormationPhase } from '../types/football';
 import { formatTime } from '../utils/matchUtils';
 import {
@@ -13,6 +13,11 @@ import {
   Sparkles,
   ArrowRight,
   Shield,
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 
 interface LiveScoreboardProps {
@@ -25,6 +30,7 @@ interface LiveScoreboardProps {
   totalPeriods: number;
   onTogglePlayPause: () => void;
   onAddMinute: (minutes: number) => void;
+  onPrevPeriod: () => void;
   onNextPeriod: () => void;
   onEndMatch: () => void;
   onResetMatch: () => void;
@@ -44,6 +50,7 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
   totalPeriods,
   onTogglePlayPause,
   onAddMinute,
+  onPrevPeriod,
   onNextPeriod,
   onEndMatch,
   onResetMatch,
@@ -52,6 +59,7 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
   onUndoOpponentGoal,
   nextScheduledPhase,
 }) => {
+  const [isConfirmEndOpen, setIsConfirmEndOpen] = useState(false);
   const currentMinute = Math.floor(elapsedSeconds / 60);
   const matchDurMin = settings.matchDurationMinutes || 60;
   const periodDurationSeconds = (matchDurMin * 60) / totalPeriods;
@@ -61,28 +69,59 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
     ((elapsedSeconds % periodDurationSeconds) / periodDurationSeconds) * 100
   );
 
+  const handleConfirmEnd = () => {
+    setIsConfirmEndOpen(false);
+    onEndMatch();
+  };
+
   return (
-    <div className="bg-slate-900/95 rounded-3xl p-4 sm:p-6 border border-slate-800 shadow-2xl backdrop-blur-xl">
-      {/* Top Bar: Match Period & Next Planned Substitution Banner */}
+    <div className="bg-slate-900/95 rounded-3xl p-4 sm:p-6 border border-slate-800 shadow-2xl backdrop-blur-xl relative">
+      {/* Top Bar: Period Switcher & End Game Action */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-800/80">
+        {/* Period Navigation */}
         <div className="flex items-center gap-2">
-          <div className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+          {/* Previous Period */}
+          <button
+            onClick={onPrevPeriod}
+            disabled={currentPeriod <= 1}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition-all active:scale-95"
+            title="Go back to previous period"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>Prev</span>
+          </button>
+
+          {/* Current Period Badge */}
+          <div className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            {`Period ${Math.min(currentPeriod, totalPeriods)} / ${totalPeriods}`}
+            <span>Period {Math.min(currentPeriod, totalPeriods)} of {totalPeriods}</span>
           </div>
 
-          <span className="text-xs text-slate-400 font-medium">
-            ({periodDurationMinutesStr} mins each)
+          {/* Next Period */}
+          <button
+            onClick={onNextPeriod}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition-all active:scale-95"
+            title={currentPeriod < totalPeriods ? `Advance to Period ${currentPeriod + 1}` : 'Final period'}
+          >
+            <span>{currentPeriod < totalPeriods ? `Next (P${currentPeriod + 1})` : 'Final'}</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+
+          <span className="text-xs text-slate-400 font-medium hidden md:inline ml-1">
+            ({periodDurationMinutesStr}m each)
           </span>
         </div>
 
-        {/* Next Scheduled Substitution Teaser */}
-        {nextScheduledPhase && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
-            <Clock className="w-3.5 h-3.5" />
-            <span>Next Planned Sub: {nextScheduledPhase.name} (Min {nextScheduledPhase.targetMinute}')</span>
-          </div>
-        )}
+        {/* Action: End Game Button */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsConfirmEndOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-extrabold shadow-sm transition-all active:scale-95"
+          >
+            <Flag className="w-4 h-4 text-rose-400" />
+            <span>End Match</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Scoreboard & Timer Grid */}
@@ -96,7 +135,7 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
             </h3>
           </div>
           <span className="text-[11px] font-semibold text-emerald-400/80 uppercase tracking-wider mt-0.5">
-            Our Squad (U12)
+            Our Squad
           </span>
 
           <div className="mt-3 flex items-center gap-3">
@@ -166,25 +205,7 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
               </button>
             </div>
 
-            {/* Next Period */}
-            <button
-              onClick={onNextPeriod}
-              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
-              title="Advance to next Period (Skip)"
-            >
-              <FastForward className="w-4 h-4" />
-            </button>
-
-            {/* End Match */}
-            <button
-              onClick={onEndMatch}
-              className="p-2.5 rounded-xl bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
-              title="End match with current result"
-            >
-              <Trophy className="w-4 h-4" />
-            </button>
-
-            {/* Reset */}
+            {/* Reset Clock & Score */}
             <button
               onClick={onResetMatch}
               className="p-2.5 rounded-xl bg-slate-800/50 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
@@ -226,6 +247,50 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* END MATCH CONFIRMATION MODAL */}
+      {isConfirmEndOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center space-y-4">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30">
+              <Flag className="w-7 h-7" />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black text-white">End Match?</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                This will stop the timer and finalize the score for the match report.
+              </p>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+              <div className="text-xs text-slate-400 font-semibold mb-1">Final Score</div>
+              <div className="text-2xl font-black text-white font-mono">
+                {settings.teamName} <span className="text-emerald-400">{scoreUs}</span> :{' '}
+                <span className="text-slate-300">{scoreThem}</span> {settings.opponentName}
+              </div>
+              <div className="text-[11px] text-slate-400 font-mono mt-1">
+                Time: {formatTime(elapsedSeconds)}
+              </div>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                onClick={() => setIsConfirmEndOpen(false)}
+                className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmEnd}
+                className="flex-1 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition-all active:scale-95"
+              >
+                Yes, End Match
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -24,7 +24,7 @@ import { SquadManager } from './components/SquadManager';
 import { ExportSummaryModal } from './components/ExportSummaryModal';
 import { GamesListView } from './components/GamesListView';
 import { GameTacticsTab } from './components/GameTacticsTab';
-import { NextSubstitutionBanner } from './components/NextSubstitutionBanner';
+import { RotationPlanWidget } from './components/RotationPlanWidget';
 
 import {
   Activity,
@@ -428,6 +428,40 @@ export default function App() {
     updateActiveGame({ status: 'completed' });
   };
 
+  // Handle Previous Period
+  const handlePreviousPeriod = () => {
+    setIsPaused(true);
+    if (activeGame.currentPeriod > 1) {
+      const prevP = activeGame.currentPeriod - 1;
+      const totalPeriods = activeGame.phases.length || 2;
+      const matchDurMin = activeGame.settings.matchDurationMinutes || 60;
+      const periodDurationSeconds = (matchDurMin * 60) / totalPeriods;
+      const targetSeconds = (prevP - 1) * periodDurationSeconds;
+
+      const prevPhase = activeGame.phases[prevP - 1];
+      const prevAssignments = prevPhase?.assignments || activeGame.activeAssignments;
+      const prevFormationId = prevPhase?.formationId || activeGame.currentFormationId;
+
+      const newEvent: MatchEvent = {
+        id: `period-prev-${Date.now()}`,
+        type: 'period_start',
+        minute: Math.floor(targetSeconds / 60),
+        second: Math.floor(targetSeconds % 60),
+        timestamp: Date.now(),
+        description: `Returned to Period ${prevP}`,
+      };
+
+      updateActiveGame(prev => ({
+        ...prev,
+        currentPeriod: prevP,
+        elapsedSeconds: Math.floor(targetSeconds),
+        activeAssignments: prevAssignments,
+        currentFormationId: prevFormationId,
+        events: [...prev.events, newEvent],
+      }));
+    }
+  };
+
   const handleNextPeriod = () => {
     setIsPaused(true);
     const totalPeriods = activeGame.phases.length;
@@ -435,12 +469,12 @@ export default function App() {
       const nextP = activeGame.currentPeriod + 1;
       const matchDurMin = activeGame.settings.matchDurationMinutes || 60;
       const periodDurationSeconds = (matchDurMin * 60) / totalPeriods;
-      const targetSeconds = activeGame.currentPeriod * periodDurationSeconds;
+      const targetSeconds = (nextP - 1) * periodDurationSeconds;
       const deltaSeconds = Math.max(0, targetSeconds - activeGame.elapsedSeconds);
-      
+
       const onPitchIds = new Set(Object.values(activeGame.activeAssignments).filter(Boolean));
       const updatedStats = { ...activeGame.playerStats };
-      
+
       players.forEach(p => {
         if (!activeGame.presentPlayerIds.includes(p.id)) return;
         if (!updatedStats[p.id]) {
@@ -453,19 +487,26 @@ export default function App() {
         }
       });
 
+      // Next phase assignments if defined in game plan
+      const nextPhase = activeGame.phases[nextP - 1];
+      const nextAssignments = nextPhase?.assignments || activeGame.activeAssignments;
+      const nextFormationId = nextPhase?.formationId || activeGame.currentFormationId;
+
       const newEvent: MatchEvent = {
         id: `period-${Date.now()}`,
         type: 'period_start',
         minute: Math.floor(targetSeconds / 60),
-        second: targetSeconds % 60,
+        second: Math.floor(targetSeconds % 60),
         timestamp: Date.now(),
         description: `Period ${nextP} Started`,
       };
-      
+
       updateActiveGame(prev => ({
         ...prev,
         currentPeriod: nextP,
-        elapsedSeconds: targetSeconds,
+        elapsedSeconds: Math.floor(targetSeconds),
+        activeAssignments: nextAssignments,
+        currentFormationId: nextFormationId,
         playerStats: updatedStats,
         events: [...prev.events, newEvent],
       }));
@@ -1236,6 +1277,7 @@ export default function App() {
                   totalPeriods={activeGame.phases.length}
                   onTogglePlayPause={handleTogglePlayPause}
                   onAddMinute={handleAddMinute}
+                  onPrevPeriod={handlePreviousPeriod}
                   onNextPeriod={handleNextPeriod}
                   onEndMatch={handleEndMatch}
                   onResetMatch={handleResetMatch}
@@ -1245,15 +1287,12 @@ export default function App() {
                   nextScheduledPhase={nextScheduledPhase}
                 />
 
-                {/* RECOMMENDED NEXT SUBSTITUTION BANNER */}
-                <NextSubstitutionBanner
-                  onPitchPlayers={onPitchPlayers}
-                  benchPlayers={benchPlayers}
-                  playerStats={activeGame.playerStats}
-                  activeAssignments={activeGame.activeAssignments}
-                  formation={currentFormation}
-                  onExecuteSwap={handleExecuteRecommendedSwap}
-                  nextScheduledPhase={nextScheduledPhase}
+                {/* ROTATION PLAN & UPCOMING SUBSTITUTIONS WIDGET */}
+                <RotationPlanWidget
+                  game={activeGame}
+                  players={players}
+                  onApplyPhase={handleApplyPhase}
+                  onExecuteSingleSwap={handleExecuteRecommendedSwap}
                 />
 
                 {/* Pitch & Bench Layout */}
