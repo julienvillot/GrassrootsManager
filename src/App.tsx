@@ -22,8 +22,9 @@ import { EventTimeline } from './components/EventTimeline';
 import { PlayingTimeStats } from './components/PlayingTimeStats';
 import { SquadManager } from './components/SquadManager';
 import { ExportSummaryModal } from './components/ExportSummaryModal';
-import { GameManager } from './components/GameManager';
-import { MatchAttendanceModal } from './components/MatchAttendanceModal';
+import { GamesListView } from './components/GamesListView';
+import { GameTacticsTab } from './components/GameTacticsTab';
+import { NextSubstitutionBanner } from './components/NextSubstitutionBanner';
 
 import {
   Activity,
@@ -45,6 +46,9 @@ import {
   X,
   ClipboardList,
   CheckSquare,
+  AlertTriangle,
+  ChevronLeft,
+  Trophy,
 } from 'lucide-react';
 
 const STORAGE_KEY = 'grassroots_manager_state_v2';
@@ -139,8 +143,9 @@ export default function App() {
   // Active game reference
   const activeGame = games.find(g => g.id === activeGameId) || games[0];
 
-  // Tab State
-  const [activeTab, setActiveTab] = useState<'live' | 'plan' | 'stats' | 'squad' | 'settings'>('live');
+  // Top-level View & Sub-tab State
+  const [mainView, setMainView] = useState<'game' | 'games_list' | 'settings'>('game');
+  const [gameSubTab, setGameSubTab] = useState<'live' | 'plan' | 'tactics' | 'stats'>('live');
 
   // Clock Play / Pause state (ephemeral to active match)
   const [isPaused, setIsPaused] = useState<boolean>(true);
@@ -162,9 +167,7 @@ export default function App() {
   }, [isPaused, activeGame?.status]);
 
   // Modals & Interaction State
-  const [isGameManagerOpen, setIsGameManagerOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [activeAlertPhase, setActiveAlertPhase] = useState<FormationPhase | null>(null);
@@ -271,6 +274,7 @@ export default function App() {
     setLiveSwapSourceSlotId(null);
     setSelectedBenchPlayerId(null);
     setActiveAlertPhase(null);
+    setMainView('game');
   };
 
   // Handle Create New Game
@@ -329,6 +333,8 @@ export default function App() {
 
     setGames(prev => [newGame, ...prev]);
     setActiveGameId(newGame.id);
+    setMainView('game');
+    setGameSubTab('tactics');
   };
 
   // Handle Delete Game
@@ -763,6 +769,41 @@ export default function App() {
     }
   };
 
+  // Handle Execute Recommended Next Substitution
+  const handleExecuteRecommendedSwap = (slotId: string, subInPlayerId: string, subOutPlayerId: string) => {
+    const subInPlayer = players.find(p => p.id === subInPlayerId);
+    const subOutPlayer = players.find(p => p.id === subOutPlayerId);
+    const slot = currentFormation.slots.find(s => s.id === slotId);
+    const min = Math.floor(activeGame.elapsedSeconds / 60);
+
+    updateActiveGame(prev => {
+      const updated = { ...prev.activeAssignments };
+      updated[slotId] = subInPlayerId;
+
+      const subEvent: MatchEvent = {
+        id: `rec-sub-${Date.now()}`,
+        type: 'sub',
+        minute: min,
+        second: prev.elapsedSeconds % 60,
+        timestamp: Date.now(),
+        playerId: subInPlayerId,
+        subOutPlayerId: subOutPlayerId,
+        description: `Sub: #${subInPlayer?.number} ${subInPlayer?.name} IN ↔ #${subOutPlayer?.number} ${subOutPlayer?.name} OUT`,
+        detail: `Fair-play rotation recommendation (${slot?.label || 'Slot'}) at min ${min}'`,
+      };
+
+      return {
+        ...prev,
+        activeAssignments: updated,
+        events: [...prev.events, subEvent],
+      };
+    });
+
+    setLiveSwapSourceSlotId(null);
+    setLiveSelectedSlotId(null);
+    setSelectedBenchPlayerId(null);
+  };
+
   // Active players and bench lists
   const currentFormation = getFormationById(activeGame.currentFormationId);
   const assignedPlayerIds = new Set(Object.values(activeGame.activeAssignments).filter(Boolean));
@@ -791,16 +832,19 @@ export default function App() {
       {isDrawerOpen && (
         <div className="fixed inset-0 z-50 flex">
           <div
-            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm animate-in fade-in"
             onClick={() => setIsDrawerOpen(false)}
           />
-          <div className="relative w-72 max-w-[80vw] bg-slate-900 border-r border-slate-800 h-full flex flex-col shadow-2xl">
+          <div className="relative w-80 max-w-[85vw] bg-slate-900 border-r border-slate-800 h-full flex flex-col shadow-2xl animate-in slide-in-from-left">
             <div className="p-5 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
                   <ClipboardList className="w-6 h-6" />
                 </div>
-                <h2 className="font-black text-lg text-white leading-tight">FC Manager</h2>
+                <div>
+                  <h2 className="font-black text-lg text-white leading-tight">FC Manager</h2>
+                  <span className="text-[11px] text-emerald-400 font-semibold">U12 Grassroots Hub</span>
+                </div>
               </div>
               <button
                 onClick={() => setIsDrawerOpen(false)}
@@ -810,45 +854,120 @@ export default function App() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-              <p className="px-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 mt-2">Current Match</p>
-              {([
-                { tab: 'live' as const, icon: <Activity className="w-5 h-5" />, label: 'Matchday Live' },
-                { tab: 'plan' as const, icon: <Layers className="w-5 h-5" />, label: 'Game Plan' },
-                { tab: 'stats' as const, icon: <Clock className="w-5 h-5" />, label: 'Playing Time' },
-              ]).map(item => (
-                <button
-                  key={item.tab}
-                  onClick={() => { setActiveTab(item.tab); setIsDrawerOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-bold transition-all ${
-                    activeTab === item.tab ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  {item.icon} {item.label}
-                </button>
-              ))}
+            <div className="flex-1 overflow-y-auto py-4 px-3 space-y-2">
+              {/* SECTION 1: GAMES & MATCHDAYS */}
+              <p className="px-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 mt-2">
+                Games & Matchdays
+              </p>
 
-              <p className="px-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 mt-6">Team Management</p>
-              {([
-                { tab: 'squad' as const, icon: <Users className="w-5 h-5" />, label: 'Global Roster' },
-                { tab: 'settings' as const, icon: <Settings className="w-5 h-5" />, label: 'Settings' },
-              ]).map(item => (
-                <button
-                  key={item.tab}
-                  onClick={() => { setActiveTab(item.tab); setIsDrawerOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-bold transition-all ${
-                    activeTab === item.tab ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              <button
+                onClick={() => {
+                  setMainView('games_list');
+                  setIsDrawerOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-bold transition-all ${
+                  mainView === 'games_list'
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Calendar className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <div className="text-left">
+                    <div>All Matches & Season</div>
+                    <div className="text-[10px] text-slate-400 font-normal">History, schedule, and stats</div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-bold border border-slate-700">
+                  {games.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setMainView('game');
+                  setIsDrawerOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-bold transition-all ${
+                  mainView === 'game'
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <Activity className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <div className="text-left min-w-0">
+                    <div className="truncate">vs {activeGame.opponentName}</div>
+                    <div className="text-[10px] text-slate-400 font-normal">Active Game Workspace</div>
+                  </div>
+                </div>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                    activeGame.status === 'in_progress'
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : activeGame.status === 'completed'
+                      ? 'bg-slate-800 text-slate-400 border border-slate-700'
+                      : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                   }`}
                 >
-                  {item.icon} {item.label}
-                </button>
-              ))}
+                  {activeGame.status === 'in_progress'
+                    ? '● Live'
+                    : activeGame.status === 'completed'
+                    ? 'Finished'
+                    : 'Upcoming'}
+                </span>
+              </button>
+
+              {/* SECTION 2: SETTINGS & ROSTER */}
+              <p className="px-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 mt-6">
+                Settings & Roster
+              </p>
+
+              <button
+                onClick={() => {
+                  setMainView('settings');
+                  setIsDrawerOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-bold transition-all ${
+                  mainView === 'settings'
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Users className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <div className="text-left">
+                    <div>Global Squad Roster</div>
+                    <div className="text-[10px] text-slate-400 font-normal">Add/edit club players</div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-bold border border-slate-700">
+                  {players.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setMainView('games_list');
+                  setIsDrawerOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-sm font-bold text-slate-300 hover:bg-slate-800 hover:text-white transition-all"
+              >
+                <Plus className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div className="text-left">
+                  <div>Schedule New Match</div>
+                  <div className="text-[10px] text-slate-400 font-normal">Set opponent, date, and venue</div>
+                </div>
+              </button>
             </div>
 
             <div className="p-4 border-t border-slate-800">
               <button
-                onClick={() => { setIsExportModalOpen(true); setIsDrawerOpen(false); }}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-sm border border-slate-700 transition-all"
+                onClick={() => {
+                  setIsExportModalOpen(true);
+                  setIsDrawerOpen(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-sm border border-slate-700 transition-all active:scale-95"
               >
                 <Share2 className="w-4 h-4 text-emerald-400" /> Share Match Report
               </button>
@@ -861,10 +980,11 @@ export default function App() {
       <header className="sticky top-0 z-40 bg-slate-900/90 border-b border-slate-800 backdrop-blur-xl px-4 sm:px-6 py-3 shadow-md pt-[env(safe-area-inset-top,12px)]">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
           {/* Burger Menu & Brand */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => setIsDrawerOpen(true)}
               className="p-2 -ml-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+              title="Open Navigation Menu"
             >
               <Menu className="w-6 h-6" />
             </button>
@@ -872,9 +992,28 @@ export default function App() {
               <ClipboardList className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="font-black text-base sm:text-lg tracking-tight text-white">
-                Grassroots FC
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="font-black text-base sm:text-lg tracking-tight text-white">
+                  Grassroots FC
+                </h1>
+                {mainView === 'game' && (
+                  <span
+                    className={`px-2 py-0.2 rounded-full text-[10px] font-bold ${
+                      activeGame.status === 'in_progress'
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : activeGame.status === 'completed'
+                        ? 'bg-slate-800 text-slate-400 border border-slate-700'
+                        : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                    }`}
+                  >
+                    {activeGame.status === 'in_progress'
+                      ? '● Live'
+                      : activeGame.status === 'completed'
+                      ? 'Finished'
+                      : 'Upcoming'}
+                  </span>
+                )}
+              </div>
               <div className="text-[11px] text-slate-400 flex items-center gap-2">
                 <span>{activeGame.settings.teamName}</span>
                 <span>•</span>
@@ -883,26 +1022,37 @@ export default function App() {
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Header Action Buttons */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsGameManagerOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700/90 text-white border border-slate-700 shadow-md transition-all active:scale-95 text-xs font-semibold"
-            >
-              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="max-w-[100px] sm:max-w-[180px] truncate">
-                vs {activeGame.opponentName}
-              </span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
+            {mainView === 'game' ? (
+              <>
+                <button
+                  onClick={() => setMainView('games_list')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700/90 text-white border border-slate-700 shadow-md transition-all active:scale-95 text-xs font-semibold"
+                  title="View All Matches"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">All</span> Matches
+                </button>
 
-            <button
-              onClick={() => setIsAttendanceModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs border border-slate-700 transition-all active:scale-95 shadow"
-            >
-              <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">Attendance</span>
-            </button>
+                <button
+                  onClick={() => setIsExportModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs border border-slate-700 transition-all active:scale-95 shadow"
+                  title="Share Match Report"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Report</span>
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setMainView('game')}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all active:scale-95 text-xs font-bold"
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>Return to Match</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -927,292 +1077,300 @@ export default function App() {
 
       {/* Main Content Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        {/* ================= TAB 1: MATCHDAY LIVE ================= */}
-        {activeTab === 'live' && (
+        {/* ================= VIEW 1: MATCHES & SEASON HUB ================= */}
+        {mainView === 'games_list' && (
+          <GamesListView
+            games={games}
+            activeGameId={activeGame.id}
+            onSelectGame={handleSelectGame}
+            onCreateGame={handleCreateGame}
+            onDeleteGame={handleDeleteGame}
+            players={players}
+          />
+        )}
+
+        {/* ================= VIEW 2: GLOBAL SETTINGS & ROSTER ================= */}
+        {mainView === 'settings' && (
+          <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in">
+            {/* Global Squad Roster */}
+            <SquadManager players={players} onUpdatePlayers={setPlayers} />
+
+            {/* Quick Action: Schedule Match */}
+            <div className="bg-slate-900/90 rounded-2xl p-6 border border-slate-800 shadow-xl backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="font-bold text-white text-base">Schedule Next Match</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Ready for the next game? Set up a new fixture with date, opponent, and venue.
+                </p>
+              </div>
+              <button
+                onClick={() => setMainView('games_list')}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 active:scale-95 transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4" /> Go to Match Scheduler
+              </button>
+            </div>
+
+            {/* Data Storage & Backup Section */}
+            <div className="bg-slate-900/90 rounded-2xl p-6 border border-slate-800 shadow-xl backdrop-blur-md space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
+                <Database className="w-5 h-5 text-emerald-400" />
+                <h3 className="font-extrabold text-white text-base">Data Storage & Device Backup</h3>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                All match plans, player stats, rosters, and game history are saved locally in your browser's persistent storage (<code className="text-emerald-400 font-mono text-[11px]">localStorage</code>). This guarantees 100% offline functionality at the pitch without cellular signal.
+              </p>
+
+              <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+                <button
+                  onClick={handleExportBackup}
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-900/30 transition-all active:scale-95"
+                >
+                  <Download className="w-4 h-4" /> Export Backup (.json)
+                </button>
+
+                <label className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs border border-slate-700 cursor-pointer transition-all active:scale-95">
+                  <Upload className="w-4 h-4 text-emerald-400" /> Restore from Backup (.json)
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportBackup}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= VIEW 3: UNIFIED GAME WORKSPACE ================= */}
+        {mainView === 'game' && (
           <div className="space-y-6 animate-in fade-in">
-            {/* Match Completed Banner */}
+            {/* FINISHED GAME WARNING BANNER */}
             {activeGame.status === 'completed' && (
-              <div className="flex items-center justify-between gap-4 px-5 py-4 rounded-2xl bg-emerald-600/20 border border-emerald-500/40 text-emerald-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 shadow-lg backdrop-blur-sm">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">🏆</span>
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
                   <div>
-                    <p className="font-extrabold text-sm text-emerald-200">Match Finished!</p>
-                    <p className="text-xs text-emerald-400">
-                      Final Score — {activeGame.settings.teamName} {activeGame.scoreUs} : {activeGame.scoreThem} {activeGame.settings.opponentName}
+                    <p className="font-extrabold text-sm text-white flex items-center gap-2">
+                      <span>Match Finished</span>
+                      <span className="font-mono text-amber-400">
+                        ({activeGame.scoreUs} - {activeGame.scoreThem})
+                      </span>
+                    </p>
+                    <p className="text-xs text-amber-300/80 mt-0.5">
+                      You are updating a completed game. Any changes to lineups, tactics, or attendance will modify historical match records.
                     </p>
                   </div>
                 </div>
+
                 <button
                   onClick={() => updateActiveGame({ status: 'in_progress' })}
-                  className="text-xs text-emerald-400 hover:text-emerald-200 underline font-semibold"
+                  className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all active:scale-95 shrink-0 self-end sm:self-center"
                 >
-                  Reopen
+                  Reopen Match
                 </button>
               </div>
             )}
 
-            {/* Live Scoreboard */}
-            <LiveScoreboard
-              settings={activeGame.settings}
-              scoreUs={activeGame.scoreUs}
-              scoreThem={activeGame.scoreThem}
-              elapsedSeconds={activeGame.elapsedSeconds}
-              isPaused={isPaused}
-              currentPeriod={activeGame.currentPeriod}
-              totalPeriods={activeGame.phases.length}
-              onTogglePlayPause={handleTogglePlayPause}
-              onAddMinute={handleAddMinute}
-              onNextPeriod={handleNextPeriod}
-              onEndMatch={handleEndMatch}
-              onResetMatch={handleResetMatch}
-              onOpenGoalModal={() => setIsGoalModalOpen(true)}
-              onAddOpponentGoal={handleAddOpponentGoal}
-              onUndoOpponentGoal={handleUndoOpponentGoal}
-              nextScheduledPhase={nextScheduledPhase}
-            />
+            {/* UNIFIED GAME MODERN SUB-TABS */}
+            <div className="flex items-center gap-1.5 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 overflow-x-auto no-scrollbar shadow-lg">
+              <button
+                onClick={() => setGameSubTab('live')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
+                  gameSubTab === 'live'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                }`}
+              >
+                <Activity className="w-4 h-4" /> Matchday Live
+              </button>
 
-            {/* Pitch & Bench Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Pitch Visualizer with Drag & Drop */}
-              <div className="lg:col-span-7 flex flex-col items-center">
-                <div className="w-full max-w-xl flex items-center justify-between mb-2 px-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
-                      <Shield className="w-4 h-4" /> Formation:
-                    </span>
-                    <span className="text-xs font-bold text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
-                      {currentFormation.name}
-                    </span>
-                  </div>
+              <button
+                onClick={() => setGameSubTab('plan')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
+                  gameSubTab === 'plan'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                }`}
+              >
+                <Layers className="w-4 h-4" /> Game Plan (Rotations)
+              </button>
 
-                  {(liveSwapSourceSlotId || selectedBenchPlayerId) && (
-                    <button
-                      onClick={() => {
-                        setLiveSwapSourceSlotId(null);
-                        setLiveSelectedSlotId(null);
-                        setSelectedBenchPlayerId(null);
-                      }}
-                      className="text-xs text-rose-400 hover:text-rose-300 font-semibold underline"
-                    >
-                      Cancel Swap
-                    </button>
-                  )}
-                </div>
+              <button
+                onClick={() => setGameSubTab('tactics')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
+                  gameSubTab === 'tactics'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                }`}
+              >
+                <Shield className="w-4 h-4" /> Tactics & Attendance ({activeGame.presentPlayerIds.length})
+              </button>
 
-                {/* Tactile Pitch with Direct Drag-and-Drop */}
-                <Pitch
-                  formation={currentFormation}
-                  assignments={activeGame.activeAssignments}
-                  customPositions={activeGame.customPositions}
-                  onUpdateSlotPosition={handleLiveUpdateSlotPosition}
-                  onResetCustomPositions={handleLiveResetCustomPositions}
-                  players={players}
-                  playerStats={activeGame.playerStats}
-                  selectedSlotId={liveSelectedSlotId}
-                  onSelectSlot={handleLiveSlotClick}
-                  swapSourceSlotId={liveSwapSourceSlotId}
-                  showPlayingTime={true}
+              <button
+                onClick={() => setGameSubTab('stats')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
+                  gameSubTab === 'stats'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                }`}
+              >
+                <Clock className="w-4 h-4" /> Playing Time & Fair Play
+              </button>
+            </div>
+
+            {/* --- SUB-TAB 1: MATCHDAY LIVE --- */}
+            {gameSubTab === 'live' && (
+              <div className="space-y-6 animate-in fade-in">
+                {/* Live Scoreboard */}
+                <LiveScoreboard
+                  settings={activeGame.settings}
+                  scoreUs={activeGame.scoreUs}
+                  scoreThem={activeGame.scoreThem}
+                  elapsedSeconds={activeGame.elapsedSeconds}
+                  isPaused={isPaused}
+                  currentPeriod={activeGame.currentPeriod}
+                  totalPeriods={activeGame.phases.length}
+                  onTogglePlayPause={handleTogglePlayPause}
+                  onAddMinute={handleAddMinute}
+                  onNextPeriod={handleNextPeriod}
+                  onEndMatch={handleEndMatch}
+                  onResetMatch={handleResetMatch}
+                  onOpenGoalModal={() => setIsGoalModalOpen(true)}
+                  onAddOpponentGoal={handleAddOpponentGoal}
+                  onUndoOpponentGoal={handleUndoOpponentGoal}
+                  nextScheduledPhase={nextScheduledPhase}
                 />
 
-                <div className="mt-2 text-center text-xs text-slate-400 flex items-center gap-1.5">
-                  <ArrowLeftRight className="w-3.5 h-3.5 text-amber-400" />
-                  <span>
-                    Drag players on screen to shift positions • Tap to swap or sub from bench!
-                  </span>
-                </div>
-              </div>
-
-              {/* Bench & Match Timeline */}
-              <div className="lg:col-span-5 space-y-6">
-                <Bench
+                {/* RECOMMENDED NEXT SUBSTITUTION BANNER */}
+                <NextSubstitutionBanner
+                  onPitchPlayers={onPitchPlayers}
                   benchPlayers={benchPlayers}
                   playerStats={activeGame.playerStats}
-                  selectedPlayerId={selectedBenchPlayerId}
-                  onSelectBenchPlayer={handleLiveBenchClick}
-                  targetMinutes={activeGame.settings.targetFairMinutesPerPlayer}
-                  isSwapMode={Boolean(liveSwapSourceSlotId)}
+                  activeAssignments={activeGame.activeAssignments}
+                  formation={currentFormation}
+                  onExecuteSwap={handleExecuteRecommendedSwap}
+                  nextScheduledPhase={nextScheduledPhase}
                 />
 
-                <EventTimeline
-                  events={activeGame.events}
-                  players={players}
-                  onDeleteEvent={handleDeleteEvent}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+                {/* Pitch & Bench Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* Pitch Visualizer with Drag & Drop */}
+                  <div className="lg:col-span-7 flex flex-col items-center">
+                    <div className="w-full max-w-xl flex items-center justify-between mb-2 px-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                          <Shield className="w-4 h-4" /> Formation:
+                        </span>
+                        <span className="text-xs font-bold text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                          {currentFormation.name}
+                        </span>
+                      </div>
 
-        {/* ================= TAB 2: GAME PLAN (4-5 FORMATIONS) ================= */}
-        {activeTab === 'plan' && (
-          <div className="animate-in fade-in">
-            <FormationPlanManager
-              phases={activeGame.phases}
-              onUpdatePhases={updatedPhases => updateActiveGame({ phases: updatedPhases })}
-              players={players}
-              presentPlayerIds={activeGame.presentPlayerIds}
-              playerStats={activeGame.playerStats}
-              onApplyPhaseToLive={handleApplyPhase}
-              isLiveMatchRunning={!isPaused}
-              currentMatchMinute={currentMinute}
-              matchDurationMinutes={activeGame.settings.matchDurationMinutes || 60}
-            />
-          </div>
-        )}
+                      {(liveSwapSourceSlotId || selectedBenchPlayerId) && (
+                        <button
+                          onClick={() => {
+                            setLiveSwapSourceSlotId(null);
+                            setLiveSelectedSlotId(null);
+                            setSelectedBenchPlayerId(null);
+                          }}
+                          className="text-xs text-rose-400 hover:text-rose-300 font-semibold underline"
+                        >
+                          Cancel Swap
+                        </button>
+                      )}
+                    </div>
 
-        {/* ================= TAB 3: PLAYING TIME & FAIR PLAY ================= */}
-        {activeTab === 'stats' && (
-          <div className="animate-in fade-in">
-            <PlayingTimeStats
-              players={players}
-              presentPlayerIds={activeGame.presentPlayerIds}
-              playerStats={activeGame.playerStats}
-              targetMinutes={activeGame.settings.targetFairMinutesPerPlayer}
-              totalMatchSeconds={activeGame.elapsedSeconds}
-            />
-          </div>
-        )}
-
-        {/* ================= TAB 4: SQUAD ROSTER ================= */}
-        {activeTab === 'squad' && (
-          <div className="animate-in fade-in">
-            <SquadManager players={players} onUpdatePlayers={setPlayers} />
-          </div>
-        )}
-
-        {/* ================= TAB 5: MATCH SETTINGS ================= */}
-        {activeTab === 'settings' && (
-          <div className="bg-slate-900/90 rounded-2xl p-6 border border-slate-800 shadow-xl backdrop-blur-md max-w-2xl mx-auto space-y-6 animate-in fade-in">
-            <div className="flex items-center gap-2 pb-4 border-b border-slate-800">
-              <Settings className="w-5 h-5 text-emerald-400" />
-              <h2 className="text-lg font-bold text-white">Match & Format Settings</h2>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Our Team Name</label>
-                  <input
-                    type="text"
-                    value={activeGame.settings.teamName}
-                    onChange={e =>
-                      updateActiveGame({
-                        settings: { ...activeGame.settings, teamName: e.target.value },
-                      })
-                    }
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Opponent Name</label>
-                  <input
-                    type="text"
-                    value={activeGame.settings.opponentName}
-                    onChange={e =>
-                      updateActiveGame({
-                        opponentName: e.target.value,
-                        settings: { ...activeGame.settings, opponentName: e.target.value },
-                      })
-                    }
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Match Format</label>
-                  <select
-                    value={activeGame.settings.format}
-                    onChange={e =>
-                      updateActiveGame({
-                        settings: { ...activeGame.settings, format: e.target.value as any },
-                      })
-                    }
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="9v9">9v9 (Standard U12)</option>
-                    <option value="7v7">7v7</option>
-                    <option value="11v11">11v11</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Match Duration</label>
-                  <div className="flex items-center">
-                    <input
-                      type="number"
-                      value={activeGame.settings.matchDurationMinutes || 60}
-                      onChange={e =>
-                        updateActiveGame({
-                          settings: {
-                            ...activeGame.settings,
-                            matchDurationMinutes: parseInt(e.target.value) || 60,
-                          },
-                        })
-                      }
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    <Pitch
+                      formation={currentFormation}
+                      assignments={activeGame.activeAssignments}
+                      customPositions={activeGame.customPositions}
+                      onUpdateSlotPosition={handleLiveUpdateSlotPosition}
+                      onResetCustomPositions={handleLiveResetCustomPositions}
+                      players={players}
+                      playerStats={activeGame.playerStats}
+                      selectedSlotId={liveSelectedSlotId}
+                      onSelectSlot={handleLiveSlotClick}
+                      swapSourceSlotId={liveSwapSourceSlotId}
+                      showPlayingTime={true}
                     />
-                    <span className="ml-2 text-xs text-slate-400">min</span>
+
+                    <div className="mt-2 text-center text-xs text-slate-400 flex items-center gap-1.5">
+                      <ArrowLeftRight className="w-3.5 h-3.5 text-amber-400" />
+                      <span>
+                        Drag players to shift positions • Tap player to swap or sub from bench
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Bench & Match Timeline */}
+                  <div className="lg:col-span-5 space-y-6">
+                    <Bench
+                      benchPlayers={benchPlayers}
+                      playerStats={activeGame.playerStats}
+                      selectedPlayerId={selectedBenchPlayerId}
+                      onSelectBenchPlayer={handleLiveBenchClick}
+                      targetMinutes={activeGame.settings.targetFairMinutesPerPlayer}
+                      isSwapMode={Boolean(liveSwapSourceSlotId)}
+                    />
+
+                    <EventTimeline
+                      events={activeGame.events}
+                      players={players}
+                      onDeleteEvent={handleDeleteEvent}
+                    />
                   </div>
                 </div>
               </div>
+            )}
 
-              {/* Data Storage & Backup Section */}
-              <div className="pt-4 border-t border-slate-800 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-emerald-400" />
-                  <h3 className="font-bold text-white text-sm">Data Storage & Device Backup</h3>
-                </div>
-                <p className="text-xs text-slate-400">
-                  All match plans, player stats, and game history are saved locally in your browser's persistent storage (<code className="text-emerald-400 font-mono text-[11px]">localStorage</code>). This ensures 100% offline functionality at the pitch without needing cellular signal or internet connection.
-                </p>
-
-                <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
-                  <button
-                    onClick={handleExportBackup}
-                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-900/30 transition-all active:scale-95"
-                  >
-                    <Download className="w-4 h-4" /> Export Backup (.json)
-                  </button>
-
-                  <label className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs border border-slate-700 cursor-pointer transition-all active:scale-95">
-                    <Upload className="w-4 h-4 text-emerald-400" /> Restore from Backup (.json)
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={handleImportBackup}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
+            {/* --- SUB-TAB 2: GAME PLAN (ROTATIONS) --- */}
+            {gameSubTab === 'plan' && (
+              <div className="animate-in fade-in">
+                <FormationPlanManager
+                  phases={activeGame.phases}
+                  onUpdatePhases={updatedPhases => updateActiveGame({ phases: updatedPhases })}
+                  players={players}
+                  presentPlayerIds={activeGame.presentPlayerIds}
+                  playerStats={activeGame.playerStats}
+                  onApplyPhaseToLive={handleApplyPhase}
+                  isLiveMatchRunning={!isPaused}
+                  currentMatchMinute={currentMinute}
+                  matchDurationMinutes={activeGame.settings.matchDurationMinutes || 60}
+                />
               </div>
-            </div>
+            )}
+
+            {/* --- SUB-TAB 3: TACTICS & ATTENDANCE --- */}
+            {gameSubTab === 'tactics' && (
+              <div className="animate-in fade-in">
+                <GameTacticsTab
+                  game={activeGame}
+                  players={players}
+                  onUpdateGame={updateActiveGame}
+                  onToggleAttendance={handleToggleAttendance}
+                />
+              </div>
+            )}
+
+            {/* --- SUB-TAB 4: PLAYING TIME & FAIR PLAY --- */}
+            {gameSubTab === 'stats' && (
+              <div className="animate-in fade-in">
+                <PlayingTimeStats
+                  players={players}
+                  presentPlayerIds={activeGame.presentPlayerIds}
+                  playerStats={activeGame.playerStats}
+                  targetMinutes={activeGame.settings.targetFairMinutesPerPlayer}
+                  totalMatchSeconds={activeGame.elapsedSeconds}
+                />
+              </div>
+            )}
           </div>
         )}
       </main>
-
-      {/* Match Attendance Modal */}
-      <MatchAttendanceModal
-        isOpen={isAttendanceModalOpen}
-        onClose={() => setIsAttendanceModalOpen(false)}
-        players={players}
-        presentPlayerIds={activeGame.presentPlayerIds}
-        onToggleAttendance={handleToggleAttendance}
-      />
-
-      {/* Game Manager Modal */}
-      <GameManager
-        games={games}
-        activeGameId={activeGame.id}
-        onSelectGame={handleSelectGame}
-        onCreateGame={handleCreateGame}
-        onDeleteGame={handleDeleteGame}
-        onUpdateGameStatus={handleUpdateGameStatus}
-        players={players}
-        isOpen={isGameManagerOpen}
-        onClose={() => setIsGameManagerOpen(false)}
-      />
 
       {/* Goal Recording Modal */}
       <GoalModal
