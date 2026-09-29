@@ -26,6 +26,7 @@ interface FormationPlanManagerProps {
   phases: FormationPhase[];
   onUpdatePhases: (phases: FormationPhase[]) => void;
   players: Player[];
+  presentPlayerIds: string[];
   playerStats?: Record<string, PlayerMatchStats>;
   activePhaseId?: string;
   onApplyPhaseToLive: (phase: FormationPhase) => void;
@@ -49,6 +50,7 @@ export const FormationPlanManager: React.FC<FormationPlanManagerProps> = ({
   phases,
   onUpdatePhases,
   players,
+  presentPlayerIds,
   playerStats,
   activePhaseId,
   onApplyPhaseToLive,
@@ -78,7 +80,7 @@ export const FormationPlanManager: React.FC<FormationPlanManagerProps> = ({
 
   // On-pitch vs Bench for current phase
   const assignedPlayerIds = new Set(Object.values(assignments).filter(Boolean));
-  const benchPlayers = players.filter(p => p.isPresent && !assignedPlayerIds.has(p.id));
+  const benchPlayers = players.filter(p => presentPlayerIds.includes(p.id) && !assignedPlayerIds.has(p.id));
 
   // Period duration based on match duration
   const periodMinutes = phases.length > 0 ? Math.round(matchDurationMinutes / phases.length) : matchDurationMinutes;

@@ -23,6 +23,7 @@ import { PlayingTimeStats } from './components/PlayingTimeStats';
 import { SquadManager } from './components/SquadManager';
 import { ExportSummaryModal } from './components/ExportSummaryModal';
 import { GameManager } from './components/GameManager';
+import { MatchAttendanceModal } from './components/MatchAttendanceModal';
 
 import {
   Activity,
@@ -40,6 +41,10 @@ import {
   Database,
   Download,
   Upload,
+  Menu,
+  X,
+  ClipboardList,
+  CheckSquare,
 } from 'lucide-react';
 
 const STORAGE_KEY = 'grassroots_manager_state_v2';
@@ -70,6 +75,7 @@ function initializeDefaultGame(squad: Player[]): Game {
     venue: 'Home',
     status: 'in_progress',
     settings: { ...DEFAULT_MATCH_SETTINGS },
+    presentPlayerIds: squad.map(p => p.id),
     phases: initialPhases,
     currentFormationId: DEFAULT_FORMATION_ID,
     activeAssignments: initialPhases[0]?.assignments || {},
@@ -98,19 +104,23 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Migration: old games used periodDurationMinutes + totalPeriods
+          // Migration for older schemas
           return parsed.map((g: any) => {
-            if (!g.settings.matchDurationMinutes) {
-              const oldDur = (g.settings.periodDurationMinutes || 30) * (g.settings.totalPeriods || 2);
-              return {
-                ...g,
-                settings: {
-                  ...g.settings,
-                  matchDurationMinutes: oldDur || 60,
-                },
-              };
+            let migrated = { ...g };
+            
+            if (!migrated.settings.matchDurationMinutes) {
+              const oldDur = (migrated.settings.periodDurationMinutes || 30) * (migrated.settings.totalPeriods || 2);
+              migrated.settings = { ...migrated.settings, matchDurationMinutes: oldDur || 60 };
             }
-            return g;
+            
+            if (!migrated.presentPlayerIds) {
+              const savedPlayersStr = localStorage.getItem(`${STORAGE_KEY}_players`);
+              const legacyPlayers = savedPlayersStr ? JSON.parse(savedPlayersStr) : DEFAULT_SQUAD;
+              migrated.presentPlayerIds = legacyPlayers
+                .filter((p: any) => p.isPresent !== false)
+                .map((p: any) => p.id);
+            }
+            return migrated;
           });
         }
       } catch (e) {
@@ -153,6 +163,8 @@ export default function App() {
 
   // Modals & Interaction State
   const [isGameManagerOpen, setIsGameManagerOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [activeAlertPhase, setActiveAlertPhase] = useState<FormationPhase | null>(null);
@@ -218,7 +230,7 @@ export default function App() {
           const updatedStats = { ...g.playerStats };
 
           players.forEach(p => {
-            if (!p.isPresent) return;
+            if (!g.presentPlayerIds.includes(p.id)) return;
             if (!updatedStats[p.id]) {
               updatedStats[p.id] = {
                 secondsPlayed: 0,
@@ -301,6 +313,7 @@ export default function App() {
       venue: newGameData.venue || 'Home',
       status: 'in_progress',
       settings: baseGame ? { ...baseGame.settings } : { ...DEFAULT_MATCH_SETTINGS },
+      presentPlayerIds: baseGame ? [...baseGame.presentPlayerIds] : players.map(p => p.id),
       phases: initialPhases,
       currentFormationId: baseGame ? baseGame.currentFormationId : DEFAULT_FORMATION_ID,
       activeAssignments: initialAssignments,
@@ -423,7 +436,7 @@ export default function App() {
       const updatedStats = { ...activeGame.playerStats };
       
       players.forEach(p => {
-        if (!p.isPresent) return;
+        if (!activeGame.presentPlayerIds.includes(p.id)) return;
         if (!updatedStats[p.id]) {
           updatedStats[p.id] = { secondsPlayed: 0, secondsOnBench: 0, goals: 0, assists: 0, subIns: 0, subOuts: 0, currentOnPitch: onPitchIds.has(p.id) };
         }
@@ -754,13 +767,23 @@ export default function App() {
   const currentFormation = getFormationById(activeGame.currentFormationId);
   const assignedPlayerIds = new Set(Object.values(activeGame.activeAssignments).filter(Boolean));
   const onPitchPlayers = players.filter(p => assignedPlayerIds.has(p.id));
-  const benchPlayers = players.filter(p => p.isPresent && !assignedPlayerIds.has(p.id));
+  const benchPlayers = players.filter(p => activeGame.presentPlayerIds.includes(p.id) && !assignedPlayerIds.has(p.id));
 
   // Upcoming scheduled phase for banner
   const currentMinute = Math.floor(activeGame.elapsedSeconds / 60);
   const nextScheduledPhase = activeGame.phases
     .filter(p => p.targetMinute > currentMinute && !activeGame.executedPhaseIds.includes(p.id))
     .sort((a, b) => a.targetMinute - b.targetMinute)[0];
+
+  const handleToggleAttendance = (playerId: string) => {
+    updateActiveGame(prev => {
+      const isCurrentlyPresent = prev.presentPlayerIds.includes(playerId);
+      const newIds = isCurrentlyPresent 
+        ? prev.presentPlayerIds.filter(id => id !== playerId)
+        : [...prev.presentPlayerIds, playerId];
+      return { ...prev, presentPlayerIds: newIds };
+    });
+  };
 
   return (
     <div className="min-h-screen bg-[#0b1120] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
@@ -1015,6 +1038,7 @@ export default function App() {
               phases={activeGame.phases}
               onUpdatePhases={updatedPhases => updateActiveGame({ phases: updatedPhases })}
               players={players}
+              presentPlayerIds={activeGame.presentPlayerIds}
               playerStats={activeGame.playerStats}
               onApplyPhaseToLive={handleApplyPhase}
               isLiveMatchRunning={!isPaused}
@@ -1029,6 +1053,7 @@ export default function App() {
           <div className="animate-in fade-in">
             <PlayingTimeStats
               players={players}
+              presentPlayerIds={activeGame.presentPlayerIds}
               playerStats={activeGame.playerStats}
               targetMinutes={activeGame.settings.targetFairMinutesPerPlayer}
               totalMatchSeconds={activeGame.elapsedSeconds}
@@ -1187,6 +1212,7 @@ export default function App() {
         scoreThem={activeGame.scoreThem}
         elapsedSeconds={activeGame.elapsedSeconds}
         players={players}
+        presentPlayerIds={activeGame.presentPlayerIds}
         playerStats={activeGame.playerStats}
         events={activeGame.events}
       />

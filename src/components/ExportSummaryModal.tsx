@@ -11,6 +11,7 @@ interface ExportSummaryModalProps {
   scoreThem: number;
   elapsedSeconds: number;
   players: Player[];
+  presentPlayerIds: string[];
   playerStats: Record<string, PlayerMatchStats>;
   events: MatchEvent[];
 }
@@ -23,6 +24,7 @@ export const ExportSummaryModal: React.FC<ExportSummaryModalProps> = ({
   scoreThem,
   elapsedSeconds,
   players,
+  presentPlayerIds,
   playerStats,
   events,
 }) => {
@@ -31,7 +33,7 @@ export const ExportSummaryModal: React.FC<ExportSummaryModalProps> = ({
   if (!isOpen) return null;
 
   const playerMap = new Map(players.map(p => [p.id, p]));
-  const presentPlayers = players.filter(p => p.isPresent);
+  const presentPlayers = players.filter(p => presentPlayerIds.includes(p.id));
 
   // Generate plain text report suitable for WhatsApp / SMS / Email
   const generateTextReport = () => {

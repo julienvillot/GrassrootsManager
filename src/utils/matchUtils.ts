@@ -115,10 +115,9 @@ function assignPlayersToSlotsByRole(
  * Generates initial 4-phase default game plan for 4 quarters (focused on 3-1-3-1)
  */
 export function createDefaultPhases(
-  players: Player[],
+  presentPlayers: Player[],
   preset: FormationPreset
 ): FormationPhase[] {
-  const presentPlayers = players.filter(p => p.isPresent);
   const slots = preset.slots;
 
   const phases: FormationPhase[] = [

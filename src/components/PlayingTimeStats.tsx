@@ -5,6 +5,7 @@ import { Trophy, Clock, CheckCircle2, AlertTriangle, ShieldCheck, User } from 'l
 
 interface PlayingTimeStatsProps {
   players: Player[];
+  presentPlayerIds: string[];
   playerStats: Record<string, PlayerMatchStats>;
   targetMinutes: number;
   totalMatchSeconds: number;
@@ -12,11 +13,12 @@ interface PlayingTimeStatsProps {
 
 export const PlayingTimeStats: React.FC<PlayingTimeStatsProps> = ({
   players,
+  presentPlayerIds,
   playerStats,
   targetMinutes,
   totalMatchSeconds,
 }) => {
-  const presentPlayers = players.filter(p => p.isPresent);
+  const presentPlayers = players.filter(p => presentPlayerIds.includes(p.id));
 
   // Calculate squad metrics
   const minutesArray = presentPlayers.map(

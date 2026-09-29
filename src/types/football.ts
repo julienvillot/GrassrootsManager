@@ -11,7 +11,6 @@ export interface Player {
   name: string;
   number: number;
   preferredPositions: PositionRole[];
-  isPresent: boolean;
   avatarColor?: string;
 }
 
@@ -95,6 +94,7 @@ export interface Game {
   venue: 'Home' | 'Away';
   status: 'upcoming' | 'in_progress' | 'completed';
   settings: MatchSettings;
+  presentPlayerIds: string[]; // <-- new property for game-specific attendance
   phases: FormationPhase[];
   currentFormationId: string;
   activeAssignments: Record<string, string>;

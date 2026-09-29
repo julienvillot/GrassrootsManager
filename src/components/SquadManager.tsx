@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Player, PositionRole } from '../types/football';
-import { Plus, Trash2, CheckCircle2, XCircle, Users, Edit3, RotateCcw } from 'lucide-react';
 import { DEFAULT_SQUAD } from '../constants/defaultSquad';
+import { Trash2, Users, Plus, RotateCcw } from 'lucide-react';
 
 interface SquadManagerProps {
   players: Player[];
@@ -14,35 +14,22 @@ const ALL_ROLES: PositionRole[] = [
   'LW', 'RW', 'CF', 'ST'
 ];
 
-export const SquadManager: React.FC<SquadManagerProps> = ({
-  players,
-  onUpdatePlayers,
-}) => {
+export const SquadManager: React.FC<SquadManagerProps> = ({ players, onUpdatePlayers }) => {
   const [isAddingPlayer, setIsAddingPlayer] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newNumber, setNewNumber] = useState(15);
+  const [newNumber, setNewNumber] = useState<number>(players.length + 1);
   const [newRoles, setNewRoles] = useState<PositionRole[]>(['CM']);
 
-  const handleToggleAttendance = (id: string) => {
-    const updated = players.map(p =>
-      p.id === id ? { ...p, isPresent: !p.isPresent } : p
-    );
-    onUpdatePlayers(updated);
-  };
-
   const handleDeletePlayer = (id: string) => {
-    if (players.length <= 9) {
-      alert('Squad must have at least 9 players for a 9v9 match.');
-      return;
+    if (confirm('Are you sure you want to remove this player from the roster?')) {
+      onUpdatePlayers(players.filter(p => p.id !== id));
     }
-    const updated = players.filter(p => p.id !== id);
-    onUpdatePlayers(updated);
   };
 
   const handleAddPlayer = () => {
     if (!newName.trim()) return;
 
-    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#f97316'];
+    const colors = ['#eab308', '#3b82f6', '#06b6d4', '#6366f1', '#8b5cf6', '#10b981', '#f97316', '#ec4899', '#f43f5e', '#84cc16'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
     const newPlayer: Player = {
@@ -50,7 +37,6 @@ export const SquadManager: React.FC<SquadManagerProps> = ({
       name: newName.trim(),
       number: newNumber || players.length + 1,
       preferredPositions: newRoles.length > 0 ? newRoles : ['CM'],
-      isPresent: true,
       avatarColor: randomColor,
     };
 
@@ -66,8 +52,6 @@ export const SquadManager: React.FC<SquadManagerProps> = ({
     }
   };
 
-  const presentCount = players.filter(p => p.isPresent).length;
-
   return (
     <div className="bg-slate-900/90 rounded-2xl p-4 sm:p-6 border border-slate-800 shadow-xl backdrop-blur-md space-y-6">
       {/* Header */}
@@ -76,11 +60,11 @@ export const SquadManager: React.FC<SquadManagerProps> = ({
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5 text-emerald-400" />
             <h3 className="font-extrabold text-white text-base sm:text-lg">
-              Squad Roster & Matchday Attendance
+              Global Roster
             </h3>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Tap the attendance badge to mark who is here today. Absent players are excluded from lineups.
+            Manage your entire team roster here.
           </p>
         </div>
 
@@ -157,27 +141,12 @@ export const SquadManager: React.FC<SquadManagerProps> = ({
         </div>
       )}
 
-      {/* Attendance Summary */}
-      <div className="flex items-center gap-2 text-xs text-slate-300">
-        <span className="font-semibold">Matchday Status:</span>
-        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
-          {presentCount} Present
-        </span>
-        <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 font-bold">
-          {players.length - presentCount} Absent
-        </span>
-      </div>
-
       {/* Player Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {players.map(player => (
           <div
             key={player.id}
-            className={`p-3 rounded-2xl border transition-all flex items-center justify-between ${
-              player.isPresent
-                ? 'bg-slate-800/60 border-slate-800 hover:border-slate-700'
-                : 'bg-slate-900/40 border-slate-800/40 opacity-50'
-            }`}
+            className="p-3 rounded-2xl border bg-slate-800/60 border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between"
           >
             <div className="flex items-center gap-3 min-w-0">
               <div
@@ -205,33 +174,12 @@ export const SquadManager: React.FC<SquadManagerProps> = ({
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              {/* Attendance toggle */}
-              <button
-                onClick={() => handleToggleAttendance(player.id)}
-                className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 ${
-                  player.isPresent
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30'
-                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30'
-                }`}
-                title="Toggle matchday attendance"
-              >
-                {player.isPresent ? (
-                  <>
-                    <CheckCircle2 className="w-3 h-3" /> Present
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="w-3 h-3" /> Absent
-                  </>
-                )}
-              </button>
-
               <button
                 onClick={() => handleDeletePlayer(player.id)}
-                className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                 title="Remove player"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-4 h-4" />
               </button>
             </div>
           </div>
