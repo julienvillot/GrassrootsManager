@@ -786,24 +786,95 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b1120] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
+    <div className="min-h-screen bg-[#0b1120] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white select-none">
+      {/* Navigation Drawer */}
+      {isDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          <div
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            onClick={() => setIsDrawerOpen(false)}
+          />
+          <div className="relative w-72 max-w-[80vw] bg-slate-900 border-r border-slate-800 h-full flex flex-col shadow-2xl">
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+                  <ClipboardList className="w-6 h-6" />
+                </div>
+                <h2 className="font-black text-lg text-white leading-tight">FC Manager</h2>
+              </div>
+              <button
+                onClick={() => setIsDrawerOpen(false)}
+                className="p-2 -mr-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+              <p className="px-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 mt-2">Current Match</p>
+              {([
+                { tab: 'live' as const, icon: <Activity className="w-5 h-5" />, label: 'Matchday Live' },
+                { tab: 'plan' as const, icon: <Layers className="w-5 h-5" />, label: 'Game Plan' },
+                { tab: 'stats' as const, icon: <Clock className="w-5 h-5" />, label: 'Playing Time' },
+              ]).map(item => (
+                <button
+                  key={item.tab}
+                  onClick={() => { setActiveTab(item.tab); setIsDrawerOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-bold transition-all ${
+                    activeTab === item.tab ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  {item.icon} {item.label}
+                </button>
+              ))}
+
+              <p className="px-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 mt-6">Team Management</p>
+              {([
+                { tab: 'squad' as const, icon: <Users className="w-5 h-5" />, label: 'Global Roster' },
+                { tab: 'settings' as const, icon: <Settings className="w-5 h-5" />, label: 'Settings' },
+              ]).map(item => (
+                <button
+                  key={item.tab}
+                  onClick={() => { setActiveTab(item.tab); setIsDrawerOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-bold transition-all ${
+                    activeTab === item.tab ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  {item.icon} {item.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-4 border-t border-slate-800">
+              <button
+                onClick={() => { setIsExportModalOpen(true); setIsDrawerOpen(false); }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-sm border border-slate-700 transition-all"
+              >
+                <Share2 className="w-4 h-4 text-emerald-400" /> Share Match Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-slate-900/90 border-b border-slate-800 backdrop-blur-xl px-4 sm:px-6 py-3 shadow-md">
+      <header className="sticky top-0 z-40 bg-slate-900/90 border-b border-slate-800 backdrop-blur-xl px-4 sm:px-6 py-3 shadow-md pt-[env(safe-area-inset-top,12px)]">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-          {/* Brand & Team Crest */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 font-black text-xl">
-              ⚽
+          {/* Burger Menu & Brand */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsDrawerOpen(true)}
+              className="p-2 -ml-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <div className="hidden sm:flex w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+              <ClipboardList className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-black text-base sm:text-lg tracking-tight text-white">
-                  Grassroots FC Manager
-                </h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  U12
-                </span>
-              </div>
+              <h1 className="font-black text-base sm:text-lg tracking-tight text-white">
+                Grassroots FC
+              </h1>
               <div className="text-[11px] text-slate-400 flex items-center gap-2">
                 <span>{activeGame.settings.teamName}</span>
                 <span>•</span>
@@ -812,86 +883,27 @@ export default function App() {
             </div>
           </div>
 
-          {/* Game Switcher Button */}
+          {/* Action Buttons */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsGameManagerOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700/90 text-white border border-slate-700 shadow-md transition-all active:scale-95 text-xs font-semibold"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700/90 text-white border border-slate-700 shadow-md transition-all active:scale-95 text-xs font-semibold"
             >
               <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="max-w-[140px] sm:max-w-[200px] truncate">
-                vs {activeGame.opponentName} ({activeGame.scoreUs}:{activeGame.scoreThem})
+              <span className="max-w-[100px] sm:max-w-[180px] truncate">
+                vs {activeGame.opponentName}
               </span>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
             </button>
 
-            {/* Match Report Button */}
             <button
-              onClick={() => setIsExportModalOpen(true)}
+              onClick={() => setIsAttendanceModalOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs border border-slate-700 transition-all active:scale-95 shadow"
             >
-              <Share2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">Report</span>
+              <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Attendance</span>
             </button>
           </div>
-        </div>
-
-        {/* Tab Navigation Menu */}
-        <div className="max-w-7xl mx-auto mt-3 flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
-          <button
-            onClick={() => setActiveTab('live')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
-              activeTab === 'live'
-                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Activity className="w-4 h-4" /> Matchday Live
-          </button>
-
-          <button
-            onClick={() => setActiveTab('plan')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
-              activeTab === 'plan'
-                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Layers className="w-4 h-4" /> Game Plan (4-5 Formations)
-          </button>
-
-          <button
-            onClick={() => setActiveTab('stats')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
-              activeTab === 'stats'
-                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Clock className="w-4 h-4" /> Playing Time & Fair Play
-          </button>
-
-          <button
-            onClick={() => setActiveTab('squad')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
-              activeTab === 'squad'
-                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Users className="w-4 h-4" /> Squad Roster
-          </button>
-
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
-              activeTab === 'settings'
-                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Settings className="w-4 h-4" /> Settings
-          </button>
         </div>
       </header>
 
@@ -1179,6 +1191,15 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Match Attendance Modal */}
+      <MatchAttendanceModal
+        isOpen={isAttendanceModalOpen}
+        onClose={() => setIsAttendanceModalOpen(false)}
+        players={players}
+        presentPlayerIds={activeGame.presentPlayerIds}
+        onToggleAttendance={handleToggleAttendance}
+      />
 
       {/* Game Manager Modal */}
       <GameManager

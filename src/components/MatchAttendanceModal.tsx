@@ -42,6 +42,21 @@ export const MatchAttendanceModal: React.FC<MatchAttendanceModalProps> = ({
             Select the players who are present for this specific match. Absent players won't appear on the bench.
           </p>
 
+          <div className="flex gap-2">
+            <button
+              onClick={() => players.forEach(p => { if (!presentPlayerIds.includes(p.id)) onToggleAttendance(p.id); })}
+              className="flex-1 text-xs font-bold py-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition-colors"
+            >
+              ✓ All Present
+            </button>
+            <button
+              onClick={() => players.forEach(p => { if (presentPlayerIds.includes(p.id)) onToggleAttendance(p.id); })}
+              className="flex-1 text-xs font-bold py-2 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 transition-colors"
+            >
+              ✗ All Absent
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {players.map(player => {
               const isPresent = presentPlayerIds.includes(player.id);

@@ -112,83 +112,81 @@ function assignPlayersToSlotsByRole(
 }
 
 /**
- * Generates initial 4-phase default game plan for 4 quarters (focused on 3-1-3-1)
+/**
+ * Generates a 4-phase game plan with fair round-robin rotation.
+ *
+ * Algorithm: Given N present players and S on-pitch slots (S < N),
+ * each quarter rotates bench players onto the pitch so that every player
+ * gets roughly equal total playing time across the 4 quarters.
+ *
+ * The GK slot is treated specially — the GK stays on for all 4 quarters
+ * unless there are multiple GK-preferred players.
  */
 export function createDefaultPhases(
   presentPlayers: Player[],
   preset: FormationPreset
 ): FormationPhase[] {
   const slots = preset.slots;
+  const slotsOnPitch = slots.length; // e.g. 9 for 9v9
+  const totalPlayers = presentPlayers.length;
+  const numPhases = 4;
 
-  const phases: FormationPhase[] = [
-    {
-      id: 'phase-1',
-      name: 'Q1: Starting 9 (0\'-15\')',
-      targetMinute: 0,
-      formationId: preset.id,
-      assignments: {},
-      notes: '3-1-3-1 setup: CDM holding pivot, high pressing wings',
-    },
-    {
-      id: 'phase-2',
-      name: 'Q2: Rotation A (15\'-30\')',
-      targetMinute: 15,
-      formationId: preset.id,
-      assignments: {},
-      notes: 'Fresh legs into wing and attack roles',
-    },
-    {
-      id: 'phase-3',
-      name: 'Q3: 2nd Half Rotation (30\'-45\')',
-      targetMinute: 30,
-      formationId: preset.id,
-      assignments: {},
-      notes: 'Rotate backline & ensure fair minutes',
-    },
-    {
-      id: 'phase-4',
-      name: 'Q4: Final Quarter (45\'-60\')',
-      targetMinute: 45,
-      formationId: preset.id,
-      assignments: {},
-      notes: 'Finish strong with all players rotated',
-    },
-  ];
+  // Phase scaffolding with dynamic target minutes (will be overridden by distributeTargetMinutes in FormationPlanManager)
+  const phases: FormationPhase[] = Array.from({ length: numPhases }, (_, i) => ({
+    id: `phase-${i + 1}`,
+    name: `Period ${i + 1}`,
+    targetMinute: 0, // will be recalculated
+    formationId: preset.id,
+    assignments: {},
+    notes: '',
+  }));
 
-  // Q1 starting lineup
-  const q1Assignments = assignPlayersToSlotsByRole(slots, presentPlayers);
-  phases[0].assignments = q1Assignments;
+  // If we have fewer players than slots, just assign everyone to every phase
+  if (totalPlayers <= slotsOnPitch) {
+    const baseAssignments = assignPlayersToSlotsByRole(slots, presentPlayers);
+    phases.forEach(phase => { phase.assignments = { ...baseAssignments }; });
+    return phases;
+  }
 
-  // Bench players in Q1
-  const q1AssignedSet = new Set(Object.values(q1Assignments));
-  const q1Bench = presentPlayers.filter(p => !q1AssignedSet.has(p.id));
-
-  // Q2 Lineup: swap in bench players into outfield positions
-  const q2Assignments: Record<string, string> = { ...q1Assignments };
+  // Separate GK from outfield for rotation
+  const gkSlot = slots.find(s => s.role === 'GK');
   const outfieldSlots = slots.filter(s => s.role !== 'GK');
+  const outfieldSlotCount = outfieldSlots.length; // e.g. 8 for 9v9
 
-  q1Bench.forEach((benchP, idx) => {
-    const targetSlot = outfieldSlots[idx % outfieldSlots.length];
-    if (targetSlot) {
-      q2Assignments[targetSlot.id] = benchP.id;
+  // Pick the best GK (first player who prefers GK)
+  const gkPlayer = presentPlayers.find(p => p.preferredPositions.includes('GK')) || presentPlayers[0];
+  const outfieldPlayers = presentPlayers.filter(p => p.id !== gkPlayer.id);
+
+  // Round-robin: create a rotation order for outfield players
+  // Each phase, we pick the next `outfieldSlotCount` players from the rotation
+  // This ensures every player cycles through fairly
+  const rotationOrder = [...outfieldPlayers];
+
+  for (let phaseIdx = 0; phaseIdx < numPhases; phaseIdx++) {
+    const assignments: Record<string, string> = {};
+
+    // GK is always assigned
+    if (gkSlot) {
+      assignments[gkSlot.id] = gkPlayer.id;
     }
-  });
-  phases[1].assignments = q2Assignments;
 
-  // Q3: alternate rotation
-  const q2AssignedSet = new Set(Object.values(q2Assignments));
-  const q2Bench = presentPlayers.filter(p => !q2AssignedSet.has(p.id));
-  const q3Assignments: Record<string, string> = { ...q2Assignments };
-  q2Bench.forEach((benchP, idx) => {
-    const targetSlot = outfieldSlots[(idx + 3) % outfieldSlots.length];
-    if (targetSlot) {
-      q3Assignments[targetSlot.id] = benchP.id;
+    // Pick the next batch of outfield players for this phase
+    const startIdx = (phaseIdx * outfieldSlotCount) % rotationOrder.length;
+    const selectedPlayers: Player[] = [];
+
+    for (let i = 0; i < outfieldSlotCount; i++) {
+      const playerIdx = (startIdx + i) % rotationOrder.length;
+      selectedPlayers.push(rotationOrder[playerIdx]);
     }
-  });
-  phases[2].assignments = q3Assignments;
 
-  // Q4: balanced finish
-  phases[3].assignments = { ...q1Assignments };
+    // Assign selected players to outfield slots using role-matching
+    const slotAssignments = assignPlayersToSlotsByRole(outfieldSlots, selectedPlayers);
+    Object.entries(slotAssignments).forEach(([slotId, playerId]) => {
+      assignments[slotId] = playerId;
+    });
+
+    phases[phaseIdx].assignments = assignments;
+  }
 
   return phases;
 }
