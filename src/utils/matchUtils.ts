@@ -1,4 +1,4 @@
-import { FormationPhase, FormationPreset, Player, PlayerMatchStats } from '../types/football';
+import { FormationPhase, FormationPreset, Player, PlayerMatchStats, PositionRole, PositionZone } from '../types/football';
 
 export function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -9,6 +9,13 @@ export function formatTime(seconds: number): string {
 export function formatMinutesOnly(seconds: number): string {
   const m = Math.round(seconds / 60);
   return `${m}m`;
+}
+
+export function getPositionZone(role: PositionRole): PositionZone {
+  if (role === 'GK') return 'GK';
+  if (['CB', 'LCB', 'RCB', 'LB', 'RB'].includes(role)) return 'DEF';
+  if (['CDM', 'CM', 'LCM', 'RCM', 'CAM', 'LM', 'RM'].includes(role)) return 'MID';
+  return 'ATT';
 }
 
 export interface PhaseDiff {

@@ -67,6 +67,8 @@ export interface MatchEvent {
   detail?: string;
 }
 
+export type PositionZone = 'GK' | 'DEF' | 'MID' | 'ATT';
+
 export interface PlayerMatchStats {
   secondsPlayed: number;
   secondsOnBench: number;
@@ -76,6 +78,7 @@ export interface PlayerMatchStats {
   subOuts: number;
   currentOnPitch: boolean;
   currentSlotId?: string;
+  secondsByZone?: Partial<Record<PositionZone, number>>;
 }
 
 export interface MatchSettings {
@@ -84,6 +87,11 @@ export interface MatchSettings {
   format: GameFormat;
   matchDurationMinutes: number; // total match duration in minutes
   targetFairMinutesPerPlayer: number;
+}
+
+export interface PeriodSnapshot {
+  elapsedSeconds: number;
+  playerStats: Record<string, PlayerMatchStats>;
 }
 
 export interface Game {
@@ -106,4 +114,6 @@ export interface Game {
   playerStats: Record<string, PlayerMatchStats>;
   events: MatchEvent[];
   executedPhaseIds: string[];
+  periodSnapshots?: Record<number, PeriodSnapshot>;
 }
+

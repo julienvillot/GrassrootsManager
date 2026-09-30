@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { KeepAwake } from '@capacitor-community/keep-awake';
 import {
   Player,
   MatchSettings,
@@ -8,9 +7,10 @@ import {
   PlayerMatchStats,
   Game,
 } from './types/football';
-import { DEFAULT_SQUAD, DEFAULT_MATCH_SETTINGS } from './constants/defaultSquad';
-import { FORMATION_PRESETS, getFormationById, DEFAULT_FORMATION_ID } from './constants/formations';
-import { createDefaultPhases, calculatePhaseDiff, formatTime } from './utils/matchUtils';
+import { getFormationById, DEFAULT_FORMATION_ID } from './constants/formations';
+import { calculatePhaseDiff, formatTime, getPositionZone } from './utils/matchUtils';
+import { useGameManager } from './hooks/useGameManager';
+import { useMatchTimer } from './hooks/useMatchTimer';
 
 import { Pitch } from './components/Pitch';
 import { Bench } from './components/Bench';
@@ -51,120 +51,27 @@ import {
   Trophy,
 } from 'lucide-react';
 
-const STORAGE_KEY = 'grassroots_manager_state_v2';
-
-function initializeDefaultGame(squad: Player[]): Game {
-  const initialPreset = getFormationById(DEFAULT_FORMATION_ID);
-  const initialPhases = createDefaultPhases(squad, initialPreset);
-  const initialAssignedIds = new Set(Object.values(initialPhases[0]?.assignments || {}));
-
-  const initialStats: Record<string, PlayerMatchStats> = {};
-  squad.forEach(p => {
-    initialStats[p.id] = {
-      secondsPlayed: 0,
-      secondsOnBench: 0,
-      goals: 0,
-      assists: 0,
-      subIns: initialAssignedIds.has(p.id) ? 1 : 0,
-      subOuts: 0,
-      currentOnPitch: initialAssignedIds.has(p.id),
-    };
-  });
-
-  return {
-    id: `game-${Date.now()}`,
-    title: 'vs Red Star Rovers (Home)',
-    date: new Date().toISOString().split('T')[0],
-    opponentName: 'Red Star Rovers',
-    venue: 'Home',
-    status: 'in_progress',
-    settings: { ...DEFAULT_MATCH_SETTINGS },
-    presentPlayerIds: squad.map(p => p.id),
-    phases: initialPhases,
-    currentFormationId: DEFAULT_FORMATION_ID,
-    activeAssignments: initialPhases[0]?.assignments || {},
-    customPositions: undefined,
-    elapsedSeconds: 0,
-    currentPeriod: 1,
-    scoreUs: 0,
-    scoreThem: 0,
-    playerStats: initialStats,
-    events: [],
-    executedPhaseIds: [],
-  };
-}
-
 export default function App() {
-  // 1. Squad State
-  const [players, setPlayers] = useState<Player[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_players`);
-    return saved ? JSON.parse(saved) : DEFAULT_SQUAD;
-  });
-
-  // 2. Games List State
-  const [games, setGames] = useState<Game[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_games`);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Migration for older schemas
-          return parsed.map((g: any) => {
-            let migrated = { ...g };
-            
-            if (!migrated.settings.matchDurationMinutes) {
-              const oldDur = (migrated.settings.periodDurationMinutes || 30) * (migrated.settings.totalPeriods || 2);
-              migrated.settings = { ...migrated.settings, matchDurationMinutes: oldDur || 60 };
-            }
-            
-            if (!migrated.presentPlayerIds) {
-              const savedPlayersStr = localStorage.getItem(`${STORAGE_KEY}_players`);
-              const legacyPlayers = savedPlayersStr ? JSON.parse(savedPlayersStr) : DEFAULT_SQUAD;
-              migrated.presentPlayerIds = legacyPlayers
-                .filter((p: any) => p.isPresent !== false)
-                .map((p: any) => p.id);
-            }
-            return migrated;
-          });
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return [initializeDefaultGame(DEFAULT_SQUAD)];
-  });
-
-  // 3. Active Game ID State
-  const [activeGameId, setActiveGameId] = useState<string>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_active_game_id`);
-    return saved || games[0]?.id || '';
-  });
-
-  // Active game reference
-  const activeGame = games.find(g => g.id === activeGameId) || games[0];
+  const {
+    players,
+    setPlayers,
+    games,
+    setGames,
+    activeGameId,
+    setActiveGameId,
+    activeGame,
+    updateActiveGame,
+    handleCreateGame: createGame,
+    handleDeleteGame,
+    handleUpdateGameStatus,
+    handleToggleAttendance,
+    handleExportBackup,
+    handleImportBackup,
+  } = useGameManager();
 
   // Top-level View & Sub-tab State
   const [mainView, setMainView] = useState<'game' | 'games_list' | 'settings'>('game');
   const [gameSubTab, setGameSubTab] = useState<'live' | 'plan' | 'tactics' | 'stats'>('live');
-
-  // Clock Play / Pause state (ephemeral to active match)
-  const [isPaused, setIsPaused] = useState<boolean>(true);
-
-  // Native App Wake Lock
-  useEffect(() => {
-    const manageWakeLock = async () => {
-      try {
-        if (!isPaused && activeGame?.status === 'in_progress') {
-          await KeepAwake.keepAwake();
-        } else {
-          await KeepAwake.allowSleep();
-        }
-      } catch (e) {
-        // Will fail silently if not running inside Capacitor
-      }
-    };
-    manageWakeLock();
-  }, [isPaused, activeGame?.status]);
 
   // Modals & Interaction State
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -172,99 +79,104 @@ export default function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [activeAlertPhase, setActiveAlertPhase] = useState<FormationPhase | null>(null);
 
+  // Prevent background scroll and viewport jumping when navigation drawer is open
+  useEffect(() => {
+    if (isDrawerOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isDrawerOpen]);
+
   // Tactile Pitch Swap State
   const [liveSelectedSlotId, setLiveSelectedSlotId] = useState<string | null>(null);
   const [liveSwapSourceSlotId, setLiveSwapSourceSlotId] = useState<string | null>(null);
   const [selectedBenchPlayerId, setSelectedBenchPlayerId] = useState<string | null>(null);
 
-  // Persistence
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_players`, JSON.stringify(players));
-  }, [players]);
+  // Accurate second-by-second driftless timer with positional zone tracking
+  const onTimerTick = (deltaSeconds: number) => {
+    if (!activeGame || activeGame.status !== 'in_progress') return;
 
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_games`, JSON.stringify(games));
-  }, [games]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_active_game_id`, activeGameId);
-  }, [activeGameId]);
-
-  // Helper to mutate active game
-  const updateActiveGame = (updater: Partial<Game> | ((prev: Game) => Game)) => {
     setGames(prevGames =>
       prevGames.map(g => {
         if (g.id !== activeGame.id) return g;
-        if (typeof updater === 'function') {
-          return updater(g);
-        }
-        return { ...g, ...updater };
+
+        const nextSeconds = g.elapsedSeconds + deltaSeconds;
+        const currentMin = Math.floor(nextSeconds / 60);
+
+        // Check if any scheduled phase is due at this minute
+        g.phases.forEach(phase => {
+          if (
+            phase.targetMinute > 0 &&
+            phase.targetMinute === currentMin &&
+            !g.executedPhaseIds.includes(phase.id) &&
+            activeAlertPhase?.id !== phase.id
+          ) {
+            setActiveAlertPhase(phase);
+          }
+        });
+
+        // Update player seconds played / bench and positional zone breakdown
+        const onPitchIds = new Set(Object.values(g.activeAssignments).filter(Boolean));
+        const formation = getFormationById(g.currentFormationId);
+        const slotRoleMap = new Map(formation.slots.map(s => [s.id, s.role]));
+        const playerSlotMap: Record<string, string> = {};
+        Object.entries(g.activeAssignments).forEach(([sId, pId]) => {
+          if (pId) playerSlotMap[pId] = sId;
+        });
+
+        const updatedStats = { ...g.playerStats };
+
+        players.forEach(p => {
+          if (!g.presentPlayerIds.includes(p.id)) return;
+          if (!updatedStats[p.id]) {
+            updatedStats[p.id] = {
+              secondsPlayed: 0,
+              secondsOnBench: 0,
+              goals: 0,
+              assists: 0,
+              subIns: onPitchIds.has(p.id) ? 1 : 0,
+              subOuts: 0,
+              currentOnPitch: onPitchIds.has(p.id),
+              secondsByZone: {},
+            };
+          }
+
+          if (onPitchIds.has(p.id)) {
+            updatedStats[p.id].secondsPlayed += deltaSeconds;
+            updatedStats[p.id].currentOnPitch = true;
+
+            const sId = playerSlotMap[p.id];
+            const role = sId ? slotRoleMap.get(sId) : undefined;
+            if (role) {
+              const zone = getPositionZone(role);
+              const currZones = updatedStats[p.id].secondsByZone || {};
+              updatedStats[p.id].secondsByZone = {
+                ...currZones,
+                [zone]: (currZones[zone] || 0) + deltaSeconds,
+              };
+            }
+          } else {
+            updatedStats[p.id].secondsOnBench += deltaSeconds;
+            updatedStats[p.id].currentOnPitch = false;
+          }
+        });
+
+        return {
+          ...g,
+          elapsedSeconds: nextSeconds,
+          playerStats: updatedStats,
+        };
       })
     );
   };
 
-  // Clock Tick Timer (Accurate second-by-second)
-  useEffect(() => {
-    if (isPaused || !activeGame) return;
-
-    const interval = setInterval(() => {
-      setGames(prevGames =>
-        prevGames.map(g => {
-          if (g.id !== activeGame.id) return g;
-
-          const nextSeconds = g.elapsedSeconds + 1;
-          const currentMin = Math.floor(nextSeconds / 60);
-
-          // Check if any scheduled phase is due at this minute
-          g.phases.forEach(phase => {
-            if (
-              phase.targetMinute > 0 &&
-              phase.targetMinute === currentMin &&
-              nextSeconds % 60 === 0 &&
-              !g.executedPhaseIds.includes(phase.id) &&
-              activeAlertPhase?.id !== phase.id
-            ) {
-              setActiveAlertPhase(phase);
-            }
-          });
-
-          // Update player seconds played / bench
-          const onPitchIds = new Set(Object.values(g.activeAssignments).filter(Boolean));
-          const updatedStats = { ...g.playerStats };
-
-          players.forEach(p => {
-            if (!g.presentPlayerIds.includes(p.id)) return;
-            if (!updatedStats[p.id]) {
-              updatedStats[p.id] = {
-                secondsPlayed: 0,
-                secondsOnBench: 0,
-                goals: 0,
-                assists: 0,
-                subIns: 0,
-                subOuts: 0,
-                currentOnPitch: onPitchIds.has(p.id),
-              };
-            }
-            if (onPitchIds.has(p.id)) {
-              updatedStats[p.id].secondsPlayed += 1;
-              updatedStats[p.id].currentOnPitch = true;
-            } else {
-              updatedStats[p.id].secondsOnBench += 1;
-              updatedStats[p.id].currentOnPitch = false;
-            }
-          });
-
-          return {
-            ...g,
-            elapsedSeconds: nextSeconds,
-            playerStats: updatedStats,
-          };
-        })
-      );
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isPaused, activeGame?.id, activeAlertPhase, players]);
+  const { isPaused, setIsPaused, togglePlayPause } = useMatchTimer({
+    isRunning: activeGame?.status === 'in_progress',
+    onTick: onTimerTick,
+  });
 
   // Handle Game Switching
   const handleSelectGame = (gameId: string) => {
@@ -280,82 +192,9 @@ export default function App() {
   // Handle Create New Game
   const handleCreateGame = (newGameData: Partial<Game>, copyFromGameId?: string) => {
     setIsPaused(true);
-    let baseGame: Game | undefined;
-    if (copyFromGameId) {
-      baseGame = games.find(g => g.id === copyFromGameId);
-    }
-
-    const defaultPreset = getFormationById(DEFAULT_FORMATION_ID);
-    const initialPhases = baseGame
-      ? JSON.parse(JSON.stringify(baseGame.phases))
-      : createDefaultPhases(players, defaultPreset);
-
-    const initialAssignments = baseGame
-      ? { ...baseGame.activeAssignments }
-      : initialPhases[0]?.assignments || {};
-
-    const initialAssignedIds = new Set(Object.values(initialAssignments));
-
-    const initialStats: Record<string, PlayerMatchStats> = {};
-    players.forEach(p => {
-      initialStats[p.id] = {
-        secondsPlayed: 0,
-        secondsOnBench: 0,
-        goals: 0,
-        assists: 0,
-        subIns: initialAssignedIds.has(p.id) ? 1 : 0,
-        subOuts: 0,
-        currentOnPitch: initialAssignedIds.has(p.id),
-      };
-    });
-
-    const newGame: Game = {
-      id: `game-${Date.now()}`,
-      title: newGameData.title || `vs ${newGameData.opponentName || 'Opponent'}`,
-      date: newGameData.date || new Date().toISOString().split('T')[0],
-      opponentName: newGameData.opponentName || 'Opponent FC',
-      venue: newGameData.venue || 'Home',
-      status: 'in_progress',
-      settings: baseGame ? { ...baseGame.settings } : { ...DEFAULT_MATCH_SETTINGS },
-      presentPlayerIds: baseGame ? [...baseGame.presentPlayerIds] : players.map(p => p.id),
-      phases: initialPhases,
-      currentFormationId: baseGame ? baseGame.currentFormationId : DEFAULT_FORMATION_ID,
-      activeAssignments: initialAssignments,
-      customPositions: baseGame?.customPositions ? { ...baseGame.customPositions } : undefined,
-      elapsedSeconds: 0,
-      currentPeriod: 1,
-      scoreUs: 0,
-      scoreThem: 0,
-      playerStats: initialStats,
-      events: [],
-      executedPhaseIds: [],
-    };
-
-    setGames(prev => [newGame, ...prev]);
-    setActiveGameId(newGame.id);
+    createGame(newGameData, copyFromGameId);
     setMainView('game');
     setGameSubTab('tactics');
-  };
-
-  // Handle Delete Game
-  const handleDeleteGame = (gameId: string) => {
-    if (games.length <= 1) {
-      alert('Cannot delete the only existing match. Create another one first.');
-      return;
-    }
-    const remaining = games.filter(g => g.id !== gameId);
-    setGames(remaining);
-    if (activeGameId === gameId) {
-      setActiveGameId(remaining[0].id);
-      setIsPaused(true);
-    }
-  };
-
-  // Handle Update Game Status
-  const handleUpdateGameStatus = (gameId: string, status: 'upcoming' | 'in_progress' | 'completed') => {
-    setGames(prev =>
-      prev.map(g => (g.id === gameId ? { ...g, status } : g))
-    );
   };
 
   // Drag-and-Drop Positional Handlers for the Live Pitch
@@ -373,45 +212,6 @@ export default function App() {
     updateActiveGame({ customPositions: undefined });
   };
 
-  // Full Database / State Backup & Restore
-  const handleExportBackup = () => {
-    const backupData = {
-      version: 2,
-      exportedAt: new Date().toISOString(),
-      players,
-      games,
-      activeGameId,
-    };
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `grassroots-fc-backup-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = event => {
-      try {
-        const data = JSON.parse(event.target?.result as string);
-        if (data.players && data.games) {
-          setPlayers(data.players);
-          setGames(data.games);
-          if (data.activeGameId) setActiveGameId(data.activeGameId);
-          alert('Team data and match history restored successfully!');
-        } else {
-          alert('Invalid backup file format.');
-        }
-      } catch (err) {
-        alert('Failed to parse backup JSON file.');
-      }
-    };
-    reader.readAsText(file);
-  };
 
   // Scoreboard Handlers
   const handleTogglePlayPause = () => setIsPaused(prev => !prev);
@@ -451,14 +251,22 @@ export default function App() {
         description: `Returned to Period ${prevP}`,
       };
 
-      updateActiveGame(prev => ({
-        ...prev,
-        currentPeriod: prevP,
-        elapsedSeconds: Math.floor(targetSeconds),
-        activeAssignments: prevAssignments,
-        currentFormationId: prevFormationId,
-        events: [...prev.events, newEvent],
-      }));
+      updateActiveGame(prev => {
+        // Restore snapshot if available to prevent inflated playing time
+        const snapshot = prev.periodSnapshots?.[prevP];
+        const restoredStats = snapshot ? snapshot.playerStats : prev.playerStats;
+        const restoredElapsed = snapshot ? snapshot.elapsedSeconds : Math.floor(targetSeconds);
+
+        return {
+          ...prev,
+          currentPeriod: prevP,
+          elapsedSeconds: restoredElapsed,
+          activeAssignments: prevAssignments,
+          currentFormationId: prevFormationId,
+          playerStats: restoredStats,
+          events: [...prev.events, newEvent],
+        };
+      });
     }
   };
 
@@ -478,7 +286,7 @@ export default function App() {
       players.forEach(p => {
         if (!activeGame.presentPlayerIds.includes(p.id)) return;
         if (!updatedStats[p.id]) {
-          updatedStats[p.id] = { secondsPlayed: 0, secondsOnBench: 0, goals: 0, assists: 0, subIns: 0, subOuts: 0, currentOnPitch: onPitchIds.has(p.id) };
+          updatedStats[p.id] = { secondsPlayed: 0, secondsOnBench: 0, goals: 0, assists: 0, subIns: 0, subOuts: 0, currentOnPitch: onPitchIds.has(p.id), secondsByZone: {} };
         }
         if (onPitchIds.has(p.id)) {
           updatedStats[p.id].secondsPlayed += deltaSeconds;
@@ -501,15 +309,25 @@ export default function App() {
         description: `Period ${nextP} Started`,
       };
 
-      updateActiveGame(prev => ({
-        ...prev,
-        currentPeriod: nextP,
-        elapsedSeconds: Math.floor(targetSeconds),
-        activeAssignments: nextAssignments,
-        currentFormationId: nextFormationId,
-        playerStats: updatedStats,
-        events: [...prev.events, newEvent],
-      }));
+      updateActiveGame(prev => {
+        // Save period snapshot before advancing to next period
+        const snapshots = { ...(prev.periodSnapshots || {}) };
+        snapshots[prev.currentPeriod] = {
+          elapsedSeconds: prev.elapsedSeconds,
+          playerStats: JSON.parse(JSON.stringify(prev.playerStats)),
+        };
+
+        return {
+          ...prev,
+          currentPeriod: nextP,
+          elapsedSeconds: Math.floor(targetSeconds),
+          activeAssignments: nextAssignments,
+          currentFormationId: nextFormationId,
+          playerStats: updatedStats,
+          events: [...prev.events, newEvent],
+          periodSnapshots: snapshots,
+        };
+      });
     } else {
       handleEndMatch();
     }
@@ -707,6 +525,26 @@ export default function App() {
       });
     }
 
+    const updatedStats = { ...activeGame.playerStats };
+    diff.subIns.forEach(inP => {
+      if (updatedStats[inP.id]) {
+        updatedStats[inP.id] = {
+          ...updatedStats[inP.id],
+          subIns: (updatedStats[inP.id].subIns || 0) + 1,
+          currentOnPitch: true,
+        };
+      }
+    });
+    diff.subOuts.forEach(outP => {
+      if (updatedStats[outP.id]) {
+        updatedStats[outP.id] = {
+          ...updatedStats[outP.id],
+          subOuts: (updatedStats[outP.id].subOuts || 0) + 1,
+          currentOnPitch: false,
+        };
+      }
+    });
+
     updateActiveGame(prev => ({
       ...prev,
       currentFormationId: phase.formationId,
@@ -716,6 +554,7 @@ export default function App() {
         ? prev.executedPhaseIds
         : [...prev.executedPhaseIds, phase.id],
       events: [...prev.events, ...newEvents],
+      playerStats: updatedStats,
     }));
 
     setActiveAlertPhase(null);
@@ -755,6 +594,22 @@ export default function App() {
         const updated = { ...prev.activeAssignments };
         updated[slotId] = selectedBenchPlayerId;
 
+        const updatedStats = { ...prev.playerStats };
+        if (benchPlayer && updatedStats[benchPlayer.id]) {
+          updatedStats[benchPlayer.id] = {
+            ...updatedStats[benchPlayer.id],
+            subIns: (updatedStats[benchPlayer.id].subIns || 0) + 1,
+            currentOnPitch: true,
+          };
+        }
+        if (offPlayer && updatedStats[offPlayer.id]) {
+          updatedStats[offPlayer.id] = {
+            ...updatedStats[offPlayer.id],
+            subOuts: (updatedStats[offPlayer.id].subOuts || 0) + 1,
+            currentOnPitch: false,
+          };
+        }
+
         const subEvent: MatchEvent = {
           id: `quick-sub-${Date.now()}`,
           type: 'sub',
@@ -773,6 +628,7 @@ export default function App() {
           ...prev,
           activeAssignments: updated,
           events: [...prev.events, subEvent],
+          playerStats: updatedStats,
         };
       });
 
@@ -796,6 +652,22 @@ export default function App() {
         const updated = { ...prev.activeAssignments };
         updated[liveSwapSourceSlotId] = playerId;
 
+        const updatedStats = { ...prev.playerStats };
+        if (benchPlayer && updatedStats[benchPlayer.id]) {
+          updatedStats[benchPlayer.id] = {
+            ...updatedStats[benchPlayer.id],
+            subIns: (updatedStats[benchPlayer.id].subIns || 0) + 1,
+            currentOnPitch: true,
+          };
+        }
+        if (offPlayer && updatedStats[offPlayer.id]) {
+          updatedStats[offPlayer.id] = {
+            ...updatedStats[offPlayer.id],
+            subOuts: (updatedStats[offPlayer.id].subOuts || 0) + 1,
+            currentOnPitch: false,
+          };
+        }
+
         const subEvent: MatchEvent = {
           id: `quick-sub-${Date.now()}`,
           type: 'sub',
@@ -814,6 +686,7 @@ export default function App() {
           ...prev,
           activeAssignments: updated,
           events: [...prev.events, subEvent],
+          playerStats: updatedStats,
         };
       });
 
@@ -836,6 +709,22 @@ export default function App() {
       const updated = { ...prev.activeAssignments };
       updated[slotId] = subInPlayerId;
 
+      const updatedStats = { ...prev.playerStats };
+      if (updatedStats[subInPlayerId]) {
+        updatedStats[subInPlayerId] = {
+          ...updatedStats[subInPlayerId],
+          subIns: (updatedStats[subInPlayerId].subIns || 0) + 1,
+          currentOnPitch: true,
+        };
+      }
+      if (updatedStats[subOutPlayerId]) {
+        updatedStats[subOutPlayerId] = {
+          ...updatedStats[subOutPlayerId],
+          subOuts: (updatedStats[subOutPlayerId].subOuts || 0) + 1,
+          currentOnPitch: false,
+        };
+      }
+
       const subEvent: MatchEvent = {
         id: `rec-sub-${Date.now()}`,
         type: 'sub',
@@ -852,6 +741,7 @@ export default function App() {
         ...prev,
         activeAssignments: updated,
         events: [...prev.events, subEvent],
+        playerStats: updatedStats,
       };
     });
 
@@ -872,15 +762,6 @@ export default function App() {
     .filter(p => p.targetMinute > currentMinute && !activeGame.executedPhaseIds.includes(p.id))
     .sort((a, b) => a.targetMinute - b.targetMinute)[0];
 
-  const handleToggleAttendance = (playerId: string) => {
-    updateActiveGame(prev => {
-      const isCurrentlyPresent = prev.presentPlayerIds.includes(playerId);
-      const newIds = isCurrentlyPresent 
-        ? prev.presentPlayerIds.filter(id => id !== playerId)
-        : [...prev.presentPlayerIds, playerId];
-      return { ...prev, presentPlayerIds: newIds };
-    });
-  };
 
   return (
     <div className="min-h-screen bg-[#0b1120] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white select-none">
@@ -888,11 +769,12 @@ export default function App() {
       {isDrawerOpen && (
         <div className="fixed inset-0 z-50 flex">
           <div
-            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm animate-in fade-in"
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
             onClick={() => setIsDrawerOpen(false)}
           />
-          <div className="relative w-80 max-w-[85vw] bg-slate-900 border-r border-slate-800 h-full flex flex-col shadow-2xl animate-in slide-in-from-left">
-            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+          <div className="relative w-80 max-w-[85vw] bg-slate-900 border-r border-slate-800 h-full h-dvh flex flex-col shadow-2xl z-10">
+            {/* Drawer Header with Notch / Safe Area padding */}
+            <div className="px-5 pb-4 pt-[calc(env(safe-area-inset-top,0px)+16px)] border-b border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
                   <ClipboardList className="w-6 h-6" />
@@ -905,6 +787,7 @@ export default function App() {
               <button
                 onClick={() => setIsDrawerOpen(false)}
                 className="p-2 -mr-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                title="Close Menu"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1017,7 +900,8 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-4 border-t border-slate-800">
+            {/* Drawer Footer with Home Indicator / Safe Area padding */}
+            <div className="p-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)] border-t border-slate-800 shrink-0">
               <button
                 onClick={() => {
                   setIsExportModalOpen(true);

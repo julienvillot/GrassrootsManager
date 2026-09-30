@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MatchSettings, Player, PlayerMatchStats, MatchEvent } from '../types/football';
 import { formatTime } from '../utils/matchUtils';
-import { X, Copy, Check, Printer, Trophy, Share2, ShieldCheck } from 'lucide-react';
+import { X, Copy, Check, Printer, Trophy, Share2, ShieldCheck, Download } from 'lucide-react';
 
 interface ExportSummaryModalProps {
   isOpen: boolean;
@@ -88,6 +88,56 @@ Grassroots FC Manager`;
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadCsv = () => {
+    const headers = [
+      'Jersey Number',
+      'Player Name',
+      'Preferred Positions',
+      'Minutes Played',
+      'Goals',
+      'Assists',
+      'Sub Ins',
+      'Sub Outs',
+      'GK Mins',
+      'DEF Mins',
+      'MID Mins',
+      'ATT Mins',
+    ];
+
+    const rows = presentPlayers.map(p => {
+      const stats = playerStats[p.id];
+      const mins = Math.round((stats?.secondsPlayed || 0) / 60);
+      const gkMins = Math.round((stats?.secondsByZone?.GK || 0) / 60);
+      const defMins = Math.round((stats?.secondsByZone?.DEF || 0) / 60);
+      const midMins = Math.round((stats?.secondsByZone?.MID || 0) / 60);
+      const attMins = Math.round((stats?.secondsByZone?.ATT || 0) / 60);
+
+      return [
+        p.number,
+        `"${p.name.replace(/"/g, '""')}"`,
+        `"${p.preferredPositions.join(', ')}"`,
+        mins,
+        stats?.goals || 0,
+        stats?.assists || 0,
+        stats?.subIns || 0,
+        stats?.subOuts || 0,
+        gkMins,
+        defMins,
+        midMins,
+        attMins,
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `match-report-${settings.teamName.replace(/\s+/g, '_')}-vs-${settings.opponentName.replace(/\s+/g, '_')}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -193,6 +243,14 @@ Grassroots FC Manager`;
           >
             {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
             {copied ? 'Copied!' : 'Copy Text'}
+          </button>
+
+          <button
+            onClick={handleDownloadCsv}
+            className="w-full sm:w-auto py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 hover:text-emerald-200 font-semibold text-xs sm:text-sm border border-emerald-500/30 flex items-center justify-center gap-2 transition-colors active:scale-98"
+            title="Download full match playing time and statistics as CSV for spreadsheet audit"
+          >
+            <Download className="w-4 h-4 text-emerald-400" /> Download CSV
           </button>
 
           <button

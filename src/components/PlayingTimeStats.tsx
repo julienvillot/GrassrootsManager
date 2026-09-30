@@ -130,6 +130,34 @@ export const PlayingTimeStats: React.FC<PlayingTimeStatsProps> = ({
                     Roles: {p.preferredPositions.join(', ')}
                   </div>
                 </div>
+                {/* Sub Ins / Outs & Positional Zones */}
+                <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                  {(stats?.subIns || 0) > 0 && (
+                    <span className="text-[10px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700/60 font-mono">
+                      ▲ {stats?.subIns} sub{(stats?.subIns || 0) > 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {stats?.secondsByZone && Object.entries(stats.secondsByZone).map(([zone, secs]) => {
+                    if (!secs || secs < 30) return null;
+                    const mins = Math.round(secs / 60);
+                    return (
+                      <span
+                        key={zone}
+                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded border font-mono ${
+                          zone === 'GK'
+                            ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                            : zone === 'DEF'
+                            ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                            : zone === 'MID'
+                            ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                            : 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                        }`}
+                      >
+                        {zone} {mins}m
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Center: Goals & Assists Badges */}

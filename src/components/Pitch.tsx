@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { FormationPreset, PitchPosition, Player, PlayerMatchStats } from '../types/football';
 import { formatMinutesOnly } from '../utils/matchUtils';
-import { ArrowLeftRight, Plus, RotateCcw, Move } from 'lucide-react';
+import { ArrowLeftRight, Plus, RotateCcw, Move, Lock, Unlock } from 'lucide-react';
 
 interface PitchProps {
   formation: FormationPreset;
@@ -37,14 +37,21 @@ export const Pitch: React.FC<PitchProps> = ({
   const pitchRef = useRef<HTMLDivElement>(null);
   const playerMap = new Map(players.map(p => [p.id, p]));
 
-  // Dragging state
+  // Sideline lock toggle to prevent accidental drag
+  const [isLocked, setIsLocked] = useState(false);
+
+  // Local drag state for 60fps responsiveness without root state re-renders
   const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
+  const [liveDragPos, setLiveDragPos] = useState<{ slotId: string; x: number; y: number } | null>(null);
   const dragStartPos = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
   const handlePointerDown = (slotId: string, e: React.PointerEvent) => {
     if (isReadOnly) return;
-    // Capture pointer for smooth dragging even if finger/mouse moves fast
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
     setDraggingSlotId(slotId);
     dragStartPos.current = {
       x: e.clientX,
@@ -54,13 +61,13 @@ export const Pitch: React.FC<PitchProps> = ({
   };
 
   const handlePointerMove = (slotId: string, e: React.PointerEvent) => {
-    if (isReadOnly || draggingSlotId !== slotId || !dragStartPos.current || !pitchRef.current) return;
+    if (isReadOnly || isLocked || draggingSlotId !== slotId || !dragStartPos.current || !pitchRef.current) return;
 
     const dx = Math.abs(e.clientX - dragStartPos.current.x);
     const dy = Math.abs(e.clientY - dragStartPos.current.y);
 
-    // If moved more than 5px, it's considered an active drag
-    if (dx > 5 || dy > 5) {
+    // If moved more than 6px, it's an active drag
+    if (dx > 6 || dy > 6) {
       dragStartPos.current.moved = true;
 
       const rect = pitchRef.current.getBoundingClientRect();
@@ -71,9 +78,7 @@ export const Pitch: React.FC<PitchProps> = ({
       const clampedX = Math.round(Math.min(94, Math.max(6, rawX)));
       const clampedY = Math.round(Math.min(93, Math.max(7, rawY)));
 
-      if (onUpdateSlotPosition) {
-        onUpdateSlotPosition(slotId, clampedX, clampedY);
-      }
+      setLiveDragPos({ slotId, x: clampedX, y: clampedY });
     }
   };
 
@@ -86,7 +91,14 @@ export const Pitch: React.FC<PitchProps> = ({
     }
 
     const wasMoved = dragStartPos.current?.moved;
+
+    // Commit final position to parent once drag completes
+    if (wasMoved && liveDragPos && liveDragPos.slotId === slotId && onUpdateSlotPosition) {
+      onUpdateSlotPosition(slotId, liveDragPos.x, liveDragPos.y);
+    }
+
     setDraggingSlotId(null);
+    setLiveDragPos(null);
     dragStartPos.current = null;
 
     // If it was just a tap/click without dragging, execute selection/swap
@@ -217,8 +229,22 @@ export const Pitch: React.FC<PitchProps> = ({
 
       {/* Top Banner: Attacking Direction & Free-Positioning Reset */}
       <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-20">
-        <div className="px-2.5 py-0.5 rounded-full bg-black/40 text-[10px] font-semibold text-emerald-200/80 tracking-wider uppercase border border-emerald-500/20 backdrop-blur-sm">
-          ▲ Attacking
+        <div className="flex items-center gap-1.5">
+          <div className="px-2.5 py-0.5 rounded-full bg-black/40 text-[10px] font-semibold text-emerald-200/80 tracking-wider uppercase border border-emerald-500/20 backdrop-blur-sm">
+            ▲ Attacking
+          </div>
+          <button
+            onClick={() => setIsLocked(!isLocked)}
+            className={`pointer-events-auto px-2 py-0.5 rounded-full text-[10px] font-bold border shadow flex items-center gap-1 backdrop-blur-sm active:scale-95 transition-all ${
+              isLocked
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:text-white'
+            }`}
+            title={isLocked ? 'Positions locked: tap player to swap or sub' : 'Positions unlocked: drag player to reposition shape'}
+          >
+            {isLocked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
+            <span>{isLocked ? 'Locked' : 'Unlocked'}</span>
+          </button>
         </div>
 
         {hasCustomPositions && onResetCustomPositions && (
@@ -241,9 +267,10 @@ export const Pitch: React.FC<PitchProps> = ({
         const isCurrentlyDragging = draggingSlotId === slot.id;
         const stats = player && playerStats ? playerStats[player.id] : undefined;
 
-        // Use custom dragged coordinates if defined, otherwise preset coordinates
-        const posX = customPositions?.[slot.id]?.x ?? slot.x;
-        const posY = customPositions?.[slot.id]?.y ?? slot.y;
+        // Use live dragged coordinates if actively dragging, else custom or preset coordinates
+        const isSlotDragging = liveDragPos?.slotId === slot.id;
+        const posX = isSlotDragging ? liveDragPos.x : (customPositions?.[slot.id]?.x ?? slot.x);
+        const posY = isSlotDragging ? liveDragPos.y : (customPositions?.[slot.id]?.y ?? slot.y);
 
         return (
           <div
