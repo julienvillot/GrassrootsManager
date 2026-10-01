@@ -67,6 +67,7 @@ export default function App() {
     handleToggleAttendance,
     handleExportBackup,
     handleImportBackup,
+    handleExportSeasonCsv,
   } = useGameManager();
 
   // Top-level View & Sub-tab State
@@ -898,6 +899,20 @@ export default function App() {
                   <div className="text-[10px] text-slate-400 font-normal">Set opponent, date, and venue</div>
                 </div>
               </button>
+
+              <button
+                onClick={() => {
+                  handleExportBackup();
+                  setIsDrawerOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-sm font-bold text-slate-300 hover:bg-slate-800 hover:text-white transition-all"
+              >
+                <Database className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div className="text-left">
+                  <div>Quick Backup</div>
+                  <div className="text-[10px] text-slate-400 font-normal">Export all data as JSON</div>
+                </div>
+              </button>
             </div>
 
             {/* Drawer Footer with Home Indicator / Safe Area padding */}
@@ -1026,6 +1041,7 @@ export default function App() {
             onCreateGame={handleCreateGame}
             onDeleteGame={handleDeleteGame}
             players={players}
+            teamName={activeGame.settings.teamName}
           />
         )}
 
@@ -1078,6 +1094,14 @@ export default function App() {
                     className="hidden"
                   />
                 </label>
+
+                <button
+                  onClick={handleExportSeasonCsv}
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 hover:text-emerald-200 font-bold text-xs border border-emerald-500/30 transition-all active:scale-95"
+                  title="Export all completed matches as a CSV spreadsheet"
+                >
+                  <Download className="w-4 h-4 text-emerald-400" /> Season CSV
+                </button>
               </div>
             </div>
           </div>

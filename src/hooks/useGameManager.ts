@@ -3,8 +3,35 @@ import { Game, Player, PlayerMatchStats } from '../types/football';
 import { DEFAULT_SQUAD, DEFAULT_MATCH_SETTINGS } from '../constants/defaultSquad';
 import { FORMATION_PRESETS, getFormationById, DEFAULT_FORMATION_ID } from '../constants/formations';
 import { createDefaultPhases } from '../utils/matchUtils';
+import { validateBackupData } from '../utils/shareUtils';
 
 export const STORAGE_KEY = 'grassroots_manager_state_v2';
+
+/** Applies schema migrations to a raw game object loaded from storage or a backup. */
+export function migrateGame(g: any): Game {
+  let migrated = { ...g };
+
+  if (!migrated.settings.matchDurationMinutes) {
+    const oldDur =
+      (migrated.settings.periodDurationMinutes || 30) * (migrated.settings.totalPeriods || 2);
+    migrated.settings = { ...migrated.settings, matchDurationMinutes: oldDur || 60 };
+  }
+
+  if (!migrated.presentPlayerIds) {
+    const savedPlayersStr = localStorage.getItem(`${STORAGE_KEY}_players`);
+    const legacyPlayers = savedPlayersStr ? JSON.parse(savedPlayersStr) : DEFAULT_SQUAD;
+    migrated.presentPlayerIds = legacyPlayers
+      .filter((p: any) => p.isPresent !== false)
+      .map((p: any) => p.id);
+  }
+
+  if (!migrated.periodSnapshots) {
+    migrated.periodSnapshots = {};
+  }
+
+  return migrated as Game;
+}
+
 
 export function initializeDefaultGame(squad: Player[]): Game {
   const initialPreset = getFormationById(DEFAULT_FORMATION_ID);
@@ -63,29 +90,7 @@ export function useGameManager() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Migration for older schemas
-          return parsed.map((g: any) => {
-            let migrated = { ...g };
-
-            if (!migrated.settings.matchDurationMinutes) {
-              const oldDur = (migrated.settings.periodDurationMinutes || 30) * (migrated.settings.totalPeriods || 2);
-              migrated.settings = { ...migrated.settings, matchDurationMinutes: oldDur || 60 };
-            }
-
-            if (!migrated.presentPlayerIds) {
-              const savedPlayersStr = localStorage.getItem(`${STORAGE_KEY}_players`);
-              const legacyPlayers = savedPlayersStr ? JSON.parse(savedPlayersStr) : DEFAULT_SQUAD;
-              migrated.presentPlayerIds = legacyPlayers
-                .filter((p: any) => p.isPresent !== false)
-                .map((p: any) => p.id);
-            }
-
-            if (!migrated.periodSnapshots) {
-              migrated.periodSnapshots = {};
-            }
-
-            return migrated;
-          });
+          return parsed.map((g: any) => migrateGame(g));
         }
       } catch (e) {
         console.error('Failed to parse saved games:', e);
@@ -269,23 +274,95 @@ export function useGameManager() {
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = event => {
       try {
         const data = JSON.parse(event.target?.result as string);
-        if (data.players && data.games) {
-          setPlayers(data.players);
-          setGames(data.games);
-          if (data.activeGameId) setActiveGameId(data.activeGameId);
-          alert('Team data and match history restored successfully!');
-        } else {
-          alert('Invalid backup file format.');
+        const validation = validateBackupData(data);
+
+        if (!validation.valid) {
+          alert(
+            `❌ Invalid backup file:\n\n${validation.errors.join('\n')}\n\nPlease select a valid Grassroots Manager backup (.json).`
+          );
+          return;
         }
+
+        const exportedDate = validation.exportedAt
+          ? new Date(validation.exportedAt).toLocaleDateString()
+          : 'Unknown date';
+
+        const confirmed = window.confirm(
+          `Restore backup?\n\n` +
+            `📋 ${validation.playerCount} players\n` +
+            `📅 ${validation.gameCount} matches\n` +
+            `💾 Exported: ${exportedDate}\n\n` +
+            `⚠️ This will replace ALL current data. This cannot be undone.`
+        );
+
+        if (!confirmed) return;
+
+        const migratedGames = (data.games as any[]).map(g => migrateGame(g));
+        setPlayers(data.players);
+        setGames(migratedGames);
+        if (data.activeGameId) setActiveGameId(data.activeGameId);
+        alert('✅ Team data and match history restored successfully!');
       } catch (err) {
-        alert('Failed to parse backup JSON file.');
+        alert('❌ Failed to read backup file. Make sure it is a valid Grassroots Manager backup (.json).');
       }
     };
+
     reader.readAsText(file);
+    // Reset so the same file can be re-imported if needed
+    e.target.value = '';
+  };
+
+  /** Exports a CSV of all completed matches for season-level analysis in a spreadsheet. */
+  const handleExportSeasonCsv = () => {
+    const headers = [
+      'Match Date',
+      'Opponent',
+      'Venue',
+      'Score Us',
+      'Score Them',
+      'Result',
+      'Duration (mins)',
+      'Format',
+      'Players Present',
+    ];
+
+    const completedGames = games
+      .filter(g => g.status === 'completed')
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    if (completedGames.length === 0) {
+      alert('No completed matches to export yet.');
+      return;
+    }
+
+    const rows = completedGames.map(g => {
+      const result = g.scoreUs > g.scoreThem ? 'W' : g.scoreUs < g.scoreThem ? 'L' : 'D';
+      return [
+        g.date,
+        `"${g.opponentName.replace(/"/g, '""')}"`,
+        g.venue,
+        g.scoreUs,
+        g.scoreThem,
+        result,
+        Math.round(g.elapsedSeconds / 60),
+        g.settings.format,
+        g.presentPlayerIds.length,
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `season-results-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return {
@@ -303,5 +380,6 @@ export function useGameManager() {
     handleToggleAttendance,
     handleExportBackup,
     handleImportBackup,
+    handleExportSeasonCsv,
   };
 }

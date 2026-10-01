@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Game, Player } from '../types/football';
+import { shareViaWhatsApp, generateSeasonReport, copyToClipboard } from '../utils/shareUtils';
 import {
   Calendar,
   Plus,
@@ -15,7 +16,10 @@ import {
   TrendingUp,
   Activity,
   AlertTriangle,
+  MessageCircle,
+  Check,
 } from 'lucide-react';
+
 
 interface GamesListViewProps {
   games: Game[];
@@ -24,6 +28,7 @@ interface GamesListViewProps {
   onCreateGame: (newGame: Partial<Game>, copyFromGameId?: string) => void;
   onDeleteGame: (gameId: string) => void;
   players: Player[];
+  teamName: string;
 }
 
 export const GamesListView: React.FC<GamesListViewProps> = ({
@@ -33,6 +38,7 @@ export const GamesListView: React.FC<GamesListViewProps> = ({
   onCreateGame,
   onDeleteGame,
   players,
+  teamName,
 }) => {
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'stats'>('all');
   const [isCreating, setIsCreating] = useState(false);
@@ -40,6 +46,18 @@ export const GamesListView: React.FC<GamesListViewProps> = ({
   const [matchDate, setMatchDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [venue, setVenue] = useState<'Home' | 'Away'>('Home');
   const [copyPlanFromId, setCopyPlanFromId] = useState<string>('');
+  const [seasonCopied, setSeasonCopied] = useState(false);
+
+  const handleShareSeasonWhatsApp = () => {
+    shareViaWhatsApp(generateSeasonReport({ games, players, teamName }));
+  };
+
+  const handleCopySeasonReport = async () => {
+    await copyToClipboard(generateSeasonReport({ games, players, teamName }));
+    setSeasonCopied(true);
+    setTimeout(() => setSeasonCopied(false), 2500);
+  };
+
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,6 +165,28 @@ export const GamesListView: React.FC<GamesListViewProps> = ({
               {totalGoalsScored - totalGoalsConceded > 0 ? `+${totalGoalsScored - totalGoalsConceded}` : totalGoalsScored - totalGoalsConceded}
             </div>
           </div>
+        </div>
+
+        {/* Share Season Report */}
+        <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-slate-700/60">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1">Share Season Report:</span>
+          <button
+            onClick={handleShareSeasonWhatsApp}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-all"
+            style={{ backgroundColor: '#25D366', color: '#fff' }}
+            title="Share season summary via WhatsApp"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            WhatsApp
+          </button>
+          <button
+            onClick={handleCopySeasonReport}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition-colors"
+            title="Copy season summary to clipboard"
+          >
+            {seasonCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            {seasonCopied ? 'Copied!' : 'Copy Text'}
+          </button>
         </div>
       </div>
 
@@ -293,9 +333,29 @@ export const GamesListView: React.FC<GamesListViewProps> = ({
       {filter === 'stats' ? (
         /* Season Fair Play Leaderboard */
         <div className="bg-slate-900/90 rounded-3xl p-5 sm:p-6 border border-slate-800 shadow-xl overflow-x-auto">
-          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
-            <TrendingUp className="w-5 h-5 text-emerald-400" />
-            <h3 className="font-extrabold text-white text-base">Season Player Minutes & Development</h3>
+          <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-800 flex-wrap">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-emerald-400" />
+              <h3 className="font-extrabold text-white text-base">Season Player Minutes & Development</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleShareSeasonWhatsApp}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-all"
+                style={{ backgroundColor: '#25D366', color: '#fff' }}
+                title="Share fair play table via WhatsApp"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                WhatsApp
+              </button>
+              <button
+                onClick={handleCopySeasonReport}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition-colors"
+              >
+                {seasonCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {seasonCopied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
           </div>
           <table className="w-full text-left text-xs">
             <thead>

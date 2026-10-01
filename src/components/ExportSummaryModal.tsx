@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { MatchSettings, Player, PlayerMatchStats, MatchEvent } from '../types/football';
 import { formatTime } from '../utils/matchUtils';
-import { X, Copy, Check, Printer, Trophy, Share2, ShieldCheck, Download } from 'lucide-react';
+import {
+  generateMatchReport,
+  shareViaWhatsApp,
+  copyToClipboard,
+} from '../utils/shareUtils';
+import { X, Copy, Check, Printer, Trophy, Share2, ShieldCheck, Download, MessageCircle } from 'lucide-react';
 
 interface ExportSummaryModalProps {
   isOpen: boolean;
@@ -32,40 +37,25 @@ export const ExportSummaryModal: React.FC<ExportSummaryModalProps> = ({
 
   if (!isOpen) return null;
 
-  const playerMap = new Map(players.map(p => [p.id, p]));
   const presentPlayers = players.filter(p => presentPlayerIds.includes(p.id));
 
-  // Generate plain text report suitable for WhatsApp / SMS / Email
-  const generateTextReport = () => {
-    const goalsUs = events.filter(e => e.type === 'goal_us');
-    const goalSummary = goalsUs.length > 0
-      ? goalsUs.map(g => `• ${g.minute}' ${g.description}`).join('\n')
-      : 'None';
+  const reportParams = {
+    settings,
+    scoreUs,
+    scoreThem,
+    elapsedSeconds,
+    players,
+    presentPlayerIds,
+    playerStats,
+    events,
+  };
 
-    const playerLines = presentPlayers
-      .map(p => {
-        const stats = playerStats[p.id];
-        const mins = Math.round((stats?.secondsPlayed || 0) / 60);
-        const goals = stats?.goals ? ` (${stats.goals} ⚽)` : '';
-        return `• #${p.number} ${p.name}: ${mins} mins played${goals}`;
-      })
-      .join('\n');
-
-    return `🏆 MATCH REPORT: U12 MATCHDAY
-⚽ ${settings.teamName} [ ${scoreUs} - ${scoreThem} ] ${settings.opponentName}
-⏱️ Total Duration: ${Math.round(elapsedSeconds / 60)} minutes
-
-🥅 Goals (${settings.teamName}):
-${goalSummary}
-
-⏱️ Playing Time Breakdown (Fair Play):
-${playerLines}
-
-Grassroots FC Manager`;
+  const handleWhatsApp = () => {
+    shareViaWhatsApp(generateMatchReport(reportParams));
   };
 
   const handleNativeShare = async () => {
-    const text = generateTextReport();
+    const text = generateMatchReport(reportParams);
     if (navigator.share) {
       try {
         await navigator.share({
@@ -77,11 +67,12 @@ Grassroots FC Manager`;
         if ((err as Error).name === 'AbortError') return;
       }
     }
+    // Fallback to clipboard
     handleCopy();
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(generateTextReport());
+  const handleCopy = async () => {
+    await copyToClipboard(generateMatchReport(reportParams));
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -151,7 +142,7 @@ Grassroots FC Manager`;
             </div>
             <div>
               <h3 className="font-extrabold text-white text-lg">
-                Matchday Summary & Report
+                Matchday Summary &amp; Report
               </h3>
               <p className="text-xs text-slate-400">Share with team parents or club officials</p>
             </div>
@@ -228,37 +219,51 @@ Grassroots FC Manager`;
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+        <div className="space-y-3 pt-2">
+          {/* Primary: WhatsApp */}
           <button
-            onClick={handleNativeShare}
-            className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 active:scale-98 transition-all"
+            onClick={handleWhatsApp}
+            className="w-full py-3.5 px-4 rounded-xl font-bold text-sm shadow-lg flex items-center justify-center gap-2.5 active:scale-[0.98] transition-all"
+            style={{ backgroundColor: '#25D366', color: '#fff' }}
           >
-            <Share2 className="w-4 h-4" />
-            Share via WhatsApp / App
+            <MessageCircle className="w-5 h-5" />
+            Send via WhatsApp
           </button>
 
-          <button
-            onClick={handleCopy}
-            className="w-full sm:w-auto py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs sm:text-sm border border-slate-700 flex items-center justify-center gap-2 transition-colors"
-          >
-            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-            {copied ? 'Copied!' : 'Copy Text'}
-          </button>
+          {/* Secondary row */}
+          <div className="flex flex-col sm:flex-row items-center gap-2">
+            <button
+              onClick={handleNativeShare}
+              className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 flex items-center justify-center gap-2 transition-colors"
+              title="Share via OS share sheet (Telegram, SMS, Email…)"
+            >
+              <Share2 className="w-4 h-4 text-emerald-400" />
+              Share via Other Apps
+            </button>
 
-          <button
-            onClick={handleDownloadCsv}
-            className="w-full sm:w-auto py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 hover:text-emerald-200 font-semibold text-xs sm:text-sm border border-emerald-500/30 flex items-center justify-center gap-2 transition-colors active:scale-98"
-            title="Download full match playing time and statistics as CSV for spreadsheet audit"
-          >
-            <Download className="w-4 h-4 text-emerald-400" /> Download CSV
-          </button>
+            <button
+              onClick={handleCopy}
+              className="w-full sm:w-auto py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 flex items-center justify-center gap-2 transition-colors"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              {copied ? 'Copied!' : 'Copy Text'}
+            </button>
 
-          <button
-            onClick={handlePrint}
-            className="w-full sm:w-auto py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs sm:text-sm border border-slate-700 flex items-center justify-center gap-2 transition-colors"
-          >
-            <Printer className="w-4 h-4" /> Print / PDF
-          </button>
+            <button
+              onClick={handleDownloadCsv}
+              className="w-full sm:w-auto py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 hover:text-emerald-200 font-semibold text-xs border border-emerald-500/30 flex items-center justify-center gap-2 transition-colors active:scale-[0.98]"
+              title="Download full match playing time and statistics as CSV"
+            >
+              <Download className="w-4 h-4 text-emerald-400" /> Download CSV
+            </button>
+
+            <button
+              onClick={handlePrint}
+              className="w-full sm:w-auto py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 flex items-center justify-center gap-2 transition-colors"
+            >
+              <Printer className="w-4 h-4" /> Print / PDF
+            </button>
+          </div>
         </div>
       </div>
     </div>
