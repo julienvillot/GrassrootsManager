@@ -15,6 +15,7 @@ import {
   Calendar,
   ArrowDownUp,
   AlertCircle,
+  Printer,
 } from 'lucide-react';
 
 interface RotationPlanWidgetProps {
@@ -22,6 +23,7 @@ interface RotationPlanWidgetProps {
   players: Player[];
   onApplyPhase: (phase: FormationPhase) => void;
   onExecuteSingleSwap: (slotId: string, subInPlayerId: string, subOutPlayerId: string) => void;
+  onOpenLineupModal?: () => void;
 }
 
 export const RotationPlanWidget: React.FC<RotationPlanWidgetProps> = ({
@@ -29,6 +31,7 @@ export const RotationPlanWidget: React.FC<RotationPlanWidgetProps> = ({
   players,
   onApplyPhase,
   onExecuteSingleSwap,
+  onOpenLineupModal,
 }) => {
   const [isScheduleExpanded, setIsScheduleExpanded] = useState(false);
   const currentMinute = Math.floor(game.elapsedSeconds / 60);
@@ -253,6 +256,17 @@ export const RotationPlanWidget: React.FC<RotationPlanWidgetProps> = ({
         {/* Expandable Breakdown of All Periods */}
         {isScheduleExpanded && (
           <div className="mt-3 space-y-3 animate-in fade-in">
+            {onOpenLineupModal && (
+              <div className="flex justify-end pb-1">
+                <button
+                  onClick={onOpenLineupModal}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold transition-all active:scale-95 shadow"
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Lineup Sheet &amp; Print</span>
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               {game.phases.map((phase, idx) => {
                 const isCurrent = idx + 1 === game.currentPeriod;

@@ -49,8 +49,13 @@ body {
   scrollbar-width: none;
 }
 
-/* Print Stylesheet for Match Reports */
+/* Print Stylesheet for Match Reports & Lineup Sheets */
 @media print {
+  @page {
+    margin: 1cm;
+    size: auto;
+  }
+
   body {
     background-color: #ffffff !important;
     color: #000000 !important;
@@ -59,4 +64,20 @@ body {
   header, nav, button, .no-print {
     display: none !important;
   }
+
+  /* Ensure modal overlays don't grey out or obscure the sheet */
+  .fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  /* Prevent awkward page breaks in the middle of a period or table */
+  .break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
 }
+

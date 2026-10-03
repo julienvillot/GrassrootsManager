@@ -20,6 +20,7 @@ import {
   AlertCircle,
   HelpCircle,
   ArrowLeftRight,
+  Printer,
 } from 'lucide-react';
 
 interface FormationPlanManagerProps {
@@ -33,6 +34,7 @@ interface FormationPlanManagerProps {
   isLiveMatchRunning: boolean;
   currentMatchMinute: number;
   matchDurationMinutes: number;
+  onOpenLineupModal?: () => void;
 }
 
 /** Recompute targetMinute for all phases so they divide the match evenly */
@@ -57,6 +59,7 @@ export const FormationPlanManager: React.FC<FormationPlanManagerProps> = ({
   isLiveMatchRunning,
   currentMatchMinute,
   matchDurationMinutes,
+  onOpenLineupModal,
 }) => {
   const [selectedPhaseIndex, setSelectedPhaseIndex] = useState(0);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
@@ -265,7 +268,17 @@ export const FormationPlanManager: React.FC<FormationPlanManagerProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {onOpenLineupModal && (
+              <button
+                onClick={onOpenLineupModal}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 shadow-md transition-all active:scale-95"
+                title="View, print, or send period lineups to WhatsApp"
+              >
+                <Printer className="w-4 h-4 text-emerald-400" /> Lineup Sheet &amp; Share
+              </button>
+            )}
+
             <button
               onClick={handleAddPhase}
               disabled={phases.length >= 5}

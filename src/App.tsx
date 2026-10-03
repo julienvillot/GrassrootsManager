@@ -22,6 +22,7 @@ import { EventTimeline } from './components/EventTimeline';
 import { PlayingTimeStats } from './components/PlayingTimeStats';
 import { SquadManager } from './components/SquadManager';
 import { ExportSummaryModal } from './components/ExportSummaryModal';
+import { LineupPlanModal } from './components/LineupPlanModal';
 import { GamesListView } from './components/GamesListView';
 import { GameTacticsTab } from './components/GameTacticsTab';
 import { RotationPlanWidget } from './components/RotationPlanWidget';
@@ -49,6 +50,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   Trophy,
+  Printer,
 } from 'lucide-react';
 
 export default function App() {
@@ -78,6 +80,7 @@ export default function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isLineupModalOpen, setIsLineupModalOpen] = useState(false);
   const [activeAlertPhase, setActiveAlertPhase] = useState<FormationPhase | null>(null);
 
   // Prevent background scroll and viewport jumping when navigation drawer is open
@@ -916,7 +919,17 @@ export default function App() {
             </div>
 
             {/* Drawer Footer with Home Indicator / Safe Area padding */}
-            <div className="p-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)] border-t border-slate-800 shrink-0">
+            <div className="p-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)] border-t border-slate-800 shrink-0 space-y-2">
+              <button
+                onClick={() => {
+                  setIsLineupModalOpen(true);
+                  setIsDrawerOpen(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-sm border border-slate-700 transition-all active:scale-95"
+              >
+                <Printer className="w-4 h-4 text-emerald-400" /> Lineup Sheet &amp; Share
+              </button>
+
               <button
                 onClick={() => {
                   setIsExportModalOpen(true);
@@ -988,6 +1001,15 @@ export default function App() {
                 >
                   <Calendar className="w-3.5 h-3.5 text-emerald-400" />
                   <span className="hidden sm:inline">All</span> Matches
+                </button>
+
+                <button
+                  onClick={() => setIsLineupModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs border border-slate-700 transition-all active:scale-95 shadow"
+                  title="View, print, or share match lineups"
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Lineups</span>
                 </button>
 
                 <button
@@ -1217,6 +1239,7 @@ export default function App() {
                   players={players}
                   onApplyPhase={handleApplyPhase}
                   onExecuteSingleSwap={handleExecuteRecommendedSwap}
+                  onOpenLineupModal={() => setIsLineupModalOpen(true)}
                 />
 
                 {/* Pitch & Bench Layout */}
@@ -1303,6 +1326,7 @@ export default function App() {
                   isLiveMatchRunning={!isPaused}
                   currentMatchMinute={currentMinute}
                   matchDurationMinutes={activeGame.settings.matchDurationMinutes || 60}
+                  onOpenLineupModal={() => setIsLineupModalOpen(true)}
                 />
               </div>
             )}
@@ -1358,6 +1382,15 @@ export default function App() {
         playerStats={activeGame.playerStats}
         events={activeGame.events}
       />
+
+      {/* Match Lineup Plan Modal */}
+      <LineupPlanModal
+        isOpen={isLineupModalOpen}
+        onClose={() => setIsLineupModalOpen(false)}
+        game={activeGame}
+        players={players}
+      />
     </div>
   );
 }
+
