@@ -52,17 +52,30 @@ body {
 /* Print Stylesheet for Match Reports & Lineup Sheets */
 @media print {
   @page {
-    margin: 1cm;
+    margin: 0.8cm;
     size: auto;
   }
 
-  body {
-    background-color: #ffffff !important;
-    color: #000000 !important;
+  /* Hide app shell, main content, header, navigation, and buttons */
+  header,
+  nav,
+  button,
+  .no-print,
+  #root > div > header,
+  #root > div > main {
+    display: none !important;
   }
 
-  header, nav, button, .no-print {
-    display: none !important;
+  body,
+  html,
+  #root,
+  #root > div {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    min-height: auto !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
   /* Ensure modal overlays don't grey out or obscure the sheet */
@@ -72,6 +85,9 @@ body {
     backdrop-filter: none !important;
     padding: 0 !important;
     display: block !important;
+    overflow: visible !important;
+    max-height: none !important;
+    width: 100% !important;
   }
 
   /* Prevent awkward page breaks in the middle of a period or table */
@@ -80,4 +96,5 @@ body {
     page-break-inside: avoid !important;
   }
 }
+
 

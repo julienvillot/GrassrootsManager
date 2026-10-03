@@ -1389,7 +1389,9 @@ export default function App() {
         onClose={() => setIsLineupModalOpen(false)}
         game={activeGame}
         players={players}
+        onUpdateGame={updateActiveGame}
       />
+
     </div>
   );
 }
