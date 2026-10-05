@@ -18,7 +18,12 @@ import {
   Flag,
   AlertTriangle,
   X,
+  ChevronDown,
+  ChevronUp,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
+
 
 interface LiveScoreboardProps {
   settings: MatchSettings;
@@ -63,6 +68,26 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
 }) => {
   const [isConfirmEndOpen, setIsConfirmEndOpen] = useState(false);
   const [showGoalUndoToast, setShowGoalUndoToast] = useState(false);
+  const [isCompact, setIsCompact] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('grassroots_scoreboard_compact');
+      if (saved !== null) return JSON.parse(saved);
+      return false;
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCompact = () => {
+    setIsCompact(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('grassroots_scoreboard_compact', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
   const prevScoreUsRef = useRef(scoreUs);
 
   useEffect(() => {
@@ -181,11 +206,20 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
           </span>
         </div>
 
-        {/* Action: End Game Button */}
+        {/* Action: End Game Button & Compact View Toggle */}
         <div className="flex items-center gap-2">
           <button
+            onClick={toggleCompact}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition-all active:scale-95"
+            title={isCompact ? 'Expand full scoreboard' : 'Compact scoreboard to save screen space'}
+          >
+            {isCompact ? <Maximize2 className="w-3.5 h-3.5 text-emerald-400" /> : <Minimize2 className="w-3.5 h-3.5 text-emerald-400" />}
+            <span className="hidden sm:inline">{isCompact ? 'Expand' : 'Compact'}</span>
+          </button>
+
+          <button
             onClick={() => setIsConfirmEndOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-extrabold shadow-sm transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-extrabold shadow-sm transition-all active:scale-95"
           >
             <Flag className="w-4 h-4 text-rose-400" />
             <span>End Match</span>
@@ -193,138 +227,215 @@ export const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
         </div>
       </div>
 
-      {/* Main Scoreboard & Timer Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-        {/* Left: Our Team */}
-        <div className="flex flex-col items-center md:items-start text-center md:text-left">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-400" />
-            <h3 className="text-base sm:text-lg font-extrabold text-white truncate max-w-[200px]">
+
+      {/* Main Scoreboard Content: Compact Mode vs Full Expanded Grid */}
+      {isCompact ? (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1 animate-in fade-in">
+          {/* Left: Teams & Score */}
+          <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
+            <span className="font-extrabold text-white text-xs sm:text-sm truncate max-w-[120px] sm:max-w-[160px]">
               {settings.teamName}
-            </h3>
-          </div>
-          <span className="text-[11px] font-semibold text-emerald-400/80 uppercase tracking-wider mt-0.5">
-            Our Squad
-          </span>
+            </span>
 
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              onClick={onOpenGoalModal}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm sm:text-base shadow-lg shadow-emerald-600/30 active:scale-95 transition-all"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" /> GOAL! ⚽
-            </button>
-            {scoreUs > 0 && onUndoOurGoal && (
-              <button
-                onClick={onUndoOurGoal}
-                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-700 transition-colors"
-                title="Undo our goal"
-              >
-                <Minus className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
+            <div className="px-3 py-1 rounded-xl bg-slate-950 font-mono font-black text-base sm:text-lg border border-slate-800 flex items-center gap-1.5 shadow-inner">
+              <span className="text-emerald-400">{scoreUs}</span>
+              <span className="text-slate-600">:</span>
+              <span className="text-slate-300">{scoreThem}</span>
+            </div>
 
-        {/* Center: Live Timer & Score */}
-        <div className="flex flex-col items-center">
-          {/* Big Score Display */}
-          <div className="flex items-center gap-4 text-4xl sm:text-5xl font-black text-white tracking-wider font-mono bg-slate-950/80 px-6 py-2 rounded-2xl border border-slate-800 shadow-inner">
-            <span className="text-emerald-400">{scoreUs}</span>
-            <span className="text-slate-600">:</span>
-            <span className="text-slate-300">{scoreThem}</span>
-          </div>
-
-          {/* Digital Timer */}
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-3xl sm:text-4xl font-mono font-black text-slate-100 tracking-tight">
-              {formatTime(elapsedSeconds)}
+            <span className="font-extrabold text-slate-300 text-xs sm:text-sm truncate max-w-[120px] sm:max-w-[160px]">
+              {settings.opponentName}
             </span>
           </div>
 
-          {/* Period Progress Bar */}
-          <div className="w-48 h-1.5 bg-slate-800 rounded-full mt-2 overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300"
-              style={{ width: `${periodProgress}%` }}
-            />
-          </div>
+          {/* Right: Digital Timer & Main Controls */}
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            <div className="px-3 py-1 bg-slate-950 rounded-xl border border-slate-800 flex items-center">
+              <span className="text-xl sm:text-2xl font-mono font-black text-white">
+                {formatTime(elapsedSeconds)}
+              </span>
+            </div>
 
-          {/* Timer Controls */}
-          <div className="flex items-center gap-2 mt-4">
             <button
               onClick={onTogglePlayPause}
-              className={`p-3 rounded-full flex items-center justify-center font-bold text-white shadow-xl transition-all active:scale-95 ${
+              className={`p-2.5 rounded-xl flex items-center justify-center font-bold text-white shadow transition-all active:scale-95 ${
                 isPaused
-                  ? 'bg-emerald-600 hover:bg-emerald-500 ring-4 ring-emerald-500/20'
-                  : 'bg-amber-600 hover:bg-amber-500 ring-4 ring-amber-500/20'
+                  ? 'bg-emerald-600 hover:bg-emerald-500'
+                  : 'bg-amber-600 hover:bg-amber-500'
               }`}
               title={isPaused ? 'Resume Match Clock' : 'Pause Match Clock'}
             >
-              {isPaused ? <Play className="w-5 h-5 fill-white ml-0.5" /> : <Pause className="w-5 h-5 fill-white" />}
+              {isPaused ? <Play className="w-4 h-4 fill-white ml-0.5" /> : <Pause className="w-4 h-4 fill-white" />}
             </button>
 
-            {/* Sync Ref Clock (+1 / -1 min) */}
-            <div className="flex items-center bg-slate-800/90 rounded-xl p-1 border border-slate-700">
+            <button
+              onClick={onOpenGoalModal}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md transition-all active:scale-95 flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[3]" /> Goal ⚽
+            </button>
+
+            <button
+              onClick={onAddOpponentGoal}
+              className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 transition-all active:scale-95"
+              title="+ Opponent Goal"
+            >
+              + Opp
+            </button>
+
+            <div className="flex items-center bg-slate-800/90 rounded-xl p-0.5 border border-slate-700">
               <button
                 onClick={() => onAddMinute(-1)}
-                className="px-2 py-1 text-slate-400 hover:text-white text-xs font-bold rounded hover:bg-slate-700 transition-colors"
-                title="Subtract 1 minute"
+                className="px-1.5 py-1 text-slate-400 hover:text-white text-[11px] font-bold"
+                title="Subtract 1 min"
               >
                 -1m
               </button>
-              <span className="w-px h-3 bg-slate-700 mx-1" />
               <button
                 onClick={() => onAddMinute(1)}
-                className="px-2 py-1 text-slate-400 hover:text-white text-xs font-bold rounded hover:bg-slate-700 transition-colors"
-                title="Add 1 minute (injury/stoppage)"
+                className="px-1.5 py-1 text-slate-400 hover:text-white text-[11px] font-bold"
+                title="Add 1 min"
               >
                 +1m
               </button>
             </div>
-
-            {/* Reset Clock & Score */}
-            <button
-              onClick={onResetMatch}
-              className="p-2.5 rounded-xl bg-slate-800/50 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
-              title="Reset match timer and score"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
           </div>
         </div>
+      ) : (
+        /* Main Scoreboard & Timer Grid (Full Expanded) */
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+          {/* Left: Our Team */}
+          <div className="flex flex-col items-center md:items-start text-center md:text-left">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-emerald-400" />
+              <h3 className="text-base sm:text-lg font-extrabold text-white truncate max-w-[200px]">
+                {settings.teamName}
+              </h3>
+            </div>
+            <span className="text-[11px] font-semibold text-emerald-400/80 uppercase tracking-wider mt-0.5">
+              Our Squad
+            </span>
 
-        {/* Right: Opponent Team */}
-        <div className="flex flex-col items-center md:items-end text-center md:text-right">
-          <div className="flex items-center gap-2">
-            <h3 className="text-base sm:text-lg font-extrabold text-white truncate max-w-[200px]">
-              {settings.opponentName}
-            </h3>
-            <span className="w-3 h-3 rounded-full bg-slate-400" />
-          </div>
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
-            Opponents
-          </span>
-
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              onClick={onAddOpponentGoal}
-              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs sm:text-sm border border-slate-700 shadow transition-all active:scale-95"
-            >
-              + Opponent Goal
-            </button>
-            {scoreThem > 0 && (
+            <div className="mt-3 flex items-center gap-2">
               <button
-                onClick={onUndoOpponentGoal}
-                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-700 transition-colors"
-                title="Undo opponent goal"
+                onClick={onOpenGoalModal}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm sm:text-base shadow-lg shadow-emerald-600/30 active:scale-95 transition-all"
               >
-                <Minus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4 stroke-[3]" /> GOAL! ⚽
               </button>
-            )}
+              {scoreUs > 0 && onUndoOurGoal && (
+                <button
+                  onClick={onUndoOurGoal}
+                  className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-700 transition-colors"
+                  title="Undo our goal"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Center: Live Timer & Score */}
+          <div className="flex flex-col items-center">
+            {/* Big Score Display */}
+            <div className="flex items-center gap-4 text-4xl sm:text-5xl font-black text-white tracking-wider font-mono bg-slate-950/80 px-6 py-2 rounded-2xl border border-slate-800 shadow-inner">
+              <span className="text-emerald-400">{scoreUs}</span>
+              <span className="text-slate-600">:</span>
+              <span className="text-slate-300">{scoreThem}</span>
+            </div>
+
+            {/* Digital Timer */}
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-3xl sm:text-4xl font-mono font-black text-slate-100 tracking-tight">
+                {formatTime(elapsedSeconds)}
+              </span>
+            </div>
+
+            {/* Period Progress Bar */}
+            <div className="w-48 h-1.5 bg-slate-800 rounded-full mt-2 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300"
+                style={{ width: `${periodProgress}%` }}
+              />
+            </div>
+
+            {/* Timer Controls */}
+            <div className="flex items-center gap-2 mt-4">
+              <button
+                onClick={onTogglePlayPause}
+                className={`p-3 rounded-full flex items-center justify-center font-bold text-white shadow-xl transition-all active:scale-95 ${
+                  isPaused
+                    ? 'bg-emerald-600 hover:bg-emerald-500 ring-4 ring-emerald-500/20'
+                    : 'bg-amber-600 hover:bg-amber-500 ring-4 ring-amber-500/20'
+                }`}
+                title={isPaused ? 'Resume Match Clock' : 'Pause Match Clock'}
+              >
+                {isPaused ? <Play className="w-5 h-5 fill-white ml-0.5" /> : <Pause className="w-5 h-5 fill-white" />}
+              </button>
+
+              {/* Sync Ref Clock (+1 / -1 min) */}
+              <div className="flex items-center bg-slate-800/90 rounded-xl p-1 border border-slate-700">
+                <button
+                  onClick={() => onAddMinute(-1)}
+                  className="px-2 py-1 text-slate-400 hover:text-white text-xs font-bold rounded hover:bg-slate-700 transition-colors"
+                  title="Subtract 1 minute"
+                >
+                  -1m
+                </button>
+                <span className="w-px h-3 bg-slate-700 mx-1" />
+                <button
+                  onClick={() => onAddMinute(1)}
+                  className="px-2 py-1 text-slate-400 hover:text-white text-xs font-bold rounded hover:bg-slate-700 transition-colors"
+                  title="Add 1 minute (injury/stoppage)"
+                >
+                  +1m
+                </button>
+              </div>
+
+              {/* Reset Clock & Score */}
+              <button
+                onClick={onResetMatch}
+                className="p-2.5 rounded-xl bg-slate-800/50 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
+                title="Reset match timer and score"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Right: Opponent Team */}
+          <div className="flex flex-col items-center md:items-end text-center md:text-right">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base sm:text-lg font-extrabold text-white truncate max-w-[200px]">
+                {settings.opponentName}
+              </h3>
+              <span className="w-3 h-3 rounded-full bg-slate-400" />
+            </div>
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
+              Opponents
+            </span>
+
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={onAddOpponentGoal}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs sm:text-sm border border-slate-700 shadow transition-all active:scale-95"
+              >
+                + Opponent Goal
+              </button>
+              {scoreThem > 0 && (
+                <button
+                  onClick={onUndoOpponentGoal}
+                  className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-700 transition-colors"
+                  title="Undo opponent goal"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
 
       {/* END MATCH CONFIRMATION MODAL */}
       {isConfirmEndOpen && (

@@ -29,6 +29,7 @@ interface GamesListViewProps {
   onDeleteGame: (gameId: string) => void;
   players: Player[];
   teamName: string;
+  onSelectPlayer?: (player: Player) => void;
 }
 
 export const GamesListView: React.FC<GamesListViewProps> = ({
@@ -39,6 +40,7 @@ export const GamesListView: React.FC<GamesListViewProps> = ({
   onDeleteGame,
   players,
   teamName,
+  onSelectPlayer,
 }) => {
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'stats'>('all');
   const [isCreating, setIsCreating] = useState(false);
@@ -372,7 +374,15 @@ export const GamesListView: React.FC<GamesListViewProps> = ({
               {players.map(p => {
                 const pStats = seasonStats[p.id];
                 return (
-                  <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr
+                    key={p.id}
+                    onClick={() => onSelectPlayer?.(p)}
+                    className={`transition-colors ${
+                      onSelectPlayer
+                        ? 'cursor-pointer hover:bg-slate-800/80 active:bg-slate-800'
+                        : 'hover:bg-slate-800/40'
+                    }`}
+                  >
                     <td className="py-3 flex items-center gap-2 text-white font-bold">
                       <span
                         className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-white shrink-0"

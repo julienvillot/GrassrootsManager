@@ -9,6 +9,7 @@ interface PlayingTimeStatsProps {
   playerStats: Record<string, PlayerMatchStats>;
   targetMinutes: number;
   totalMatchSeconds: number;
+  onSelectPlayer?: (player: Player) => void;
 }
 
 export const PlayingTimeStats: React.FC<PlayingTimeStatsProps> = ({
@@ -17,6 +18,7 @@ export const PlayingTimeStats: React.FC<PlayingTimeStatsProps> = ({
   playerStats,
   targetMinutes,
   totalMatchSeconds,
+  onSelectPlayer,
 }) => {
   const presentPlayers = players.filter(p => presentPlayerIds.includes(p.id));
 
@@ -102,7 +104,10 @@ export const PlayingTimeStats: React.FC<PlayingTimeStatsProps> = ({
           return (
             <div
               key={p.id}
-              className="p-3 rounded-2xl bg-slate-800/50 border border-slate-800 hover:border-slate-700 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+              onClick={() => onSelectPlayer?.(p)}
+              className={`p-3 rounded-2xl bg-slate-800/50 border border-slate-800 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                onSelectPlayer ? 'cursor-pointer hover:bg-slate-800 hover:border-slate-700 active:scale-[0.99]' : ''
+              }`}
             >
               {/* Left: Player Info */}
               <div className="flex items-center gap-3 min-w-[200px]">

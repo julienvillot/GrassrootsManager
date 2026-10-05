@@ -34,6 +34,7 @@ export const RotationPlanWidget: React.FC<RotationPlanWidgetProps> = ({
   onOpenLineupModal,
 }) => {
   const [isScheduleExpanded, setIsScheduleExpanded] = useState(false);
+  const [isWidgetExpanded, setIsWidgetExpanded] = useState(false);
   const currentMinute = Math.floor(game.elapsedSeconds / 60);
 
   // Identify next scheduled phase
@@ -44,6 +45,9 @@ export const RotationPlanWidget: React.FC<RotationPlanWidgetProps> = ({
     game.phases.find(p => !game.executedPhaseIds.includes(p.id) && p.id !== game.phases[0]?.id) ||
     game.phases[game.currentPeriod] ||
     null;
+
+  const isRotationDueNow = nextPhase ? nextPhase.targetMinute <= currentMinute : false;
+  const showFullRotation = isWidgetExpanded || isRotationDueNow;
 
   // Calculate substitutions for the next scheduled phase
   const nextDiff = nextPhase
@@ -89,40 +93,94 @@ export const RotationPlanWidget: React.FC<RotationPlanWidgetProps> = ({
     : undefined;
 
   return (
-    <div className="bg-slate-900/95 rounded-3xl p-4 sm:p-5 border border-slate-800 shadow-2xl backdrop-blur-xl space-y-4">
+    <div className="bg-slate-900/95 rounded-3xl p-3.5 sm:p-4 border border-slate-800 shadow-2xl backdrop-blur-xl space-y-3">
       {/* 1. UPCOMING SCHEDULED ROTATION (WHEN & WHO TO CHANGE) */}
       {nextPhase && nextDiff && (nextDiff.subIns.length > 0 || nextDiff.subOuts.length > 0) ? (
-        <div className="space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+        !showFullRotation ? (
+          /* COMPACT LOW-PROFILE BANNER */
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 shrink-0">
                 <Clock className="w-4 h-4" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-extrabold text-white text-sm sm:text-base">
+                  <span className="font-extrabold text-white text-xs sm:text-sm">
                     Next Rotation: {nextPhase.name}
-                  </h3>
+                  </span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30">
                     Min {nextPhase.targetMinute}'
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-[11px] text-slate-400">
                   {nextPhase.targetMinute > currentMinute
-                    ? `Scheduled in ${nextPhase.targetMinute - currentMinute} minute${nextPhase.targetMinute - currentMinute > 1 ? 's' : ''}`
-                    : 'Scheduled for this period break'}
+                    ? `In ${nextPhase.targetMinute - currentMinute} min • ${nextDiff.subIns.length} subs planned`
+                    : `${nextDiff.subIns.length} subs planned`}
                 </p>
               </div>
             </div>
 
-            <button
-              onClick={() => onApplyPhase(nextPhase)}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition-all active:scale-95 flex items-center gap-1.5 self-end sm:self-center"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Apply {nextDiff.subIns.length} Substitutions Now</span>
-            </button>
+            <div className="flex items-center gap-2 self-end sm:self-center">
+              <button
+                onClick={() => setIsWidgetExpanded(true)}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all flex items-center gap-1 shadow-sm"
+              >
+                <span>View Subs ({nextDiff.subIns.length})</span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+              <button
+                onClick={() => onApplyPhase(nextPhase)}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Apply Now</span>
+              </button>
+            </div>
           </div>
+        ) : (
+          /* EXPANDED ROTATION BREAKDOWN */
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-extrabold text-white text-sm sm:text-base">
+                      Next Rotation: {nextPhase.name}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                      Min {nextPhase.targetMinute}'
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {nextPhase.targetMinute > currentMinute
+                      ? `Scheduled in ${nextPhase.targetMinute - currentMinute} minute${nextPhase.targetMinute - currentMinute > 1 ? 's' : ''}`
+                      : 'Scheduled for this period break'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                {!isRotationDueNow && (
+                  <button
+                    onClick={() => setIsWidgetExpanded(false)}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/60 transition-all flex items-center gap-1"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Collapse</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => onApplyPhase(nextPhase)}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition-all active:scale-95 flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Apply {nextDiff.subIns.length} Substitutions Now</span>
+                </button>
+              </div>
+            </div>
 
           {/* Planned Changes Grid (Who comes OUT vs Who comes IN) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -195,7 +253,8 @@ export const RotationPlanWidget: React.FC<RotationPlanWidgetProps> = ({
             </div>
           </div>
         </div>
-      ) : (
+      )
+    ) : (
         /* No planned changes or game plan finished: show dynamic fatigue recommendation */
         mostMinutesPitchPlayer && leastMinutesBenchPlayer && candidateSlotId && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

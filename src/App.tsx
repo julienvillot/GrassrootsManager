@@ -26,6 +26,7 @@ import { LineupPlanModal } from './components/LineupPlanModal';
 import { GamesListView } from './components/GamesListView';
 import { GameTacticsTab } from './components/GameTacticsTab';
 import { RotationPlanWidget } from './components/RotationPlanWidget';
+import { PlayerDetailModal } from './components/PlayerDetailModal';
 
 import {
   Activity,
@@ -82,6 +83,13 @@ export default function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isLineupModalOpen, setIsLineupModalOpen] = useState(false);
   const [activeAlertPhase, setActiveAlertPhase] = useState<FormationPhase | null>(null);
+  const [selectedPlayerForDetail, setSelectedPlayerForDetail] = useState<Player | null>(null);
+  const [mobilePitchBenchTab, setMobilePitchBenchTab] = useState<'both' | 'pitch' | 'bench'>('both');
+
+  const handleUpdateSinglePlayer = (updatedPlayer: Player) => {
+    setPlayers(prev => prev.map(p => (p.id === updatedPlayer.id ? updatedPlayer : p)));
+    setSelectedPlayerForDetail(updatedPlayer);
+  };
 
   // Prevent background scroll and viewport jumping when navigation drawer is open
   useEffect(() => {
@@ -1064,6 +1072,7 @@ export default function App() {
             onDeleteGame={handleDeleteGame}
             players={players}
             teamName={activeGame.settings.teamName}
+            onSelectPlayer={p => setSelectedPlayerForDetail(p)}
           />
         )}
 
@@ -1071,7 +1080,11 @@ export default function App() {
         {mainView === 'settings' && (
           <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in">
             {/* Global Squad Roster */}
-            <SquadManager players={players} onUpdatePlayers={setPlayers} />
+            <SquadManager
+              players={players}
+              onUpdatePlayers={setPlayers}
+              onSelectPlayer={p => setSelectedPlayerForDetail(p)}
+            />
 
             {/* Quick Action: Schedule Match */}
             <div className="bg-slate-900/90 rounded-2xl p-6 border border-slate-800 shadow-xl backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1165,46 +1178,50 @@ export default function App() {
             <div className="flex items-center gap-1.5 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 overflow-x-auto no-scrollbar shadow-lg">
               <button
                 onClick={() => setGameSubTab('live')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
                   gameSubTab === 'live'
                     ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
                 }`}
               >
-                <Activity className="w-4 h-4" /> Matchday Live
+                <Activity className="w-4 h-4" />
+                <span>Live<span className="hidden sm:inline"> Match</span></span>
               </button>
 
               <button
                 onClick={() => setGameSubTab('plan')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
                   gameSubTab === 'plan'
                     ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
                 }`}
               >
-                <Layers className="w-4 h-4" /> Game Plan (Rotations)
+                <Layers className="w-4 h-4" />
+                <span>Rotations<span className="hidden sm:inline"> Plan</span></span>
               </button>
 
               <button
                 onClick={() => setGameSubTab('tactics')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
                   gameSubTab === 'tactics'
                     ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
                 }`}
               >
-                <Shield className="w-4 h-4" /> Tactics & Attendance ({activeGame.presentPlayerIds.length})
+                <Shield className="w-4 h-4" />
+                <span>Tactics <span className="text-[11px] opacity-80 font-mono">({activeGame.presentPlayerIds.length})</span></span>
               </button>
 
               <button
                 onClick={() => setGameSubTab('stats')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 ${
                   gameSubTab === 'stats'
                     ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
                 }`}
               >
-                <Clock className="w-4 h-4" /> Playing Time & Fair Play
+                <Clock className="w-4 h-4" />
+                <span>Fair Play<span className="hidden sm:inline"> & Stats</span></span>
               </button>
             </div>
 
@@ -1242,10 +1259,48 @@ export default function App() {
                   onOpenLineupModal={() => setIsLineupModalOpen(true)}
                 />
 
+                {/* Mobile Quick Pitch / Bench View Segmented Control */}
+                <div className="lg:hidden flex items-center justify-center p-1 bg-slate-900/90 rounded-2xl border border-slate-800 shadow-md">
+                  <button
+                    onClick={() => setMobilePitchBenchTab('both')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
+                      mobilePitchBenchTab === 'both'
+                        ? 'bg-slate-800 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    All Views
+                  </button>
+                  <button
+                    onClick={() => setMobilePitchBenchTab('pitch')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
+                      mobilePitchBenchTab === 'pitch'
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Pitch ({onPitchPlayers.length})
+                  </button>
+                  <button
+                    onClick={() => setMobilePitchBenchTab('bench')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
+                      mobilePitchBenchTab === 'bench'
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Bench ({benchPlayers.length})
+                  </button>
+                </div>
+
                 {/* Pitch & Bench Layout */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   {/* Pitch Visualizer with Drag & Drop */}
-                  <div className="lg:col-span-7 flex flex-col items-center">
+                  <div
+                    className={`lg:col-span-7 flex flex-col items-center ${
+                      mobilePitchBenchTab === 'bench' ? 'hidden lg:flex' : 'flex'
+                    }`}
+                  >
                     <div className="w-full max-w-xl flex items-center justify-between mb-2 px-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
@@ -1293,7 +1348,11 @@ export default function App() {
                   </div>
 
                   {/* Bench & Match Timeline */}
-                  <div className="lg:col-span-5 space-y-6">
+                  <div
+                    className={`lg:col-span-5 space-y-6 ${
+                      mobilePitchBenchTab === 'pitch' ? 'hidden lg:block' : 'block'
+                    }`}
+                  >
                     <Bench
                       benchPlayers={benchPlayers}
                       playerStats={activeGame.playerStats}
@@ -1352,6 +1411,7 @@ export default function App() {
                   playerStats={activeGame.playerStats}
                   targetMinutes={activeGame.settings.targetFairMinutesPerPlayer}
                   totalMatchSeconds={activeGame.elapsedSeconds}
+                  onSelectPlayer={p => setSelectedPlayerForDetail(p)}
                 />
               </div>
             )}
@@ -1390,6 +1450,17 @@ export default function App() {
         game={activeGame}
         players={players}
         onUpdateGame={updateActiveGame}
+      />
+
+      {/* Player Career & Match Detail Modal */}
+      <PlayerDetailModal
+        player={selectedPlayerForDetail}
+        isOpen={Boolean(selectedPlayerForDetail)}
+        onClose={() => setSelectedPlayerForDetail(null)}
+        games={games}
+        allPlayers={players}
+        activeGame={activeGame}
+        onUpdatePlayer={handleUpdateSinglePlayer}
       />
 
     </div>
